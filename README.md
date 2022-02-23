@@ -1,4 +1,4 @@
- #Solving-Poisson-s-Equation-through-DL-for-CFD-apllications
+#Solving-Poisson-s-Equation-through-DL-for-CFD-apllications
 
 This repository contains the codes to allow reproduce results from the **Solving Poisson's Equation $
 The work is divided with respect to the dissertation chapters as follows:
@@ -35,4 +35,6 @@ The work is divided with respect to the dissertation chapters as follows:
 
   - Algorithm 2
 
+  - Generate blockMeshDict
 
+  Generate blockMeshDict Python scripts to generate dictionaries to be used by blockMesh OpenFOAM utility.
