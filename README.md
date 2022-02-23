@@ -25,17 +25,23 @@ The work is divided with respect to the dissertation chapters as follows:
 
   - CNN Neural networks (NN)
     - Full CNN architecture
+
     - PCA based encoder + CNN
     - PCA based encoder + CNN + PCA based decoder
 
   - MLP NN (with PCA based encoder and decoder)
 
+	Codes for:
+	- Training 
+	- Predict and evaluate
+	Result examples
+
 ## - **Chapter 5** - DLPoissonFoam solver
 
   - Algorithm 1
-
 
   - Algorithm 2
 
 ## - Generate blockMeshDict
 
+Python scripts for generating blockMeshDict files to use with blockMesh utily from OpenFOAM.
