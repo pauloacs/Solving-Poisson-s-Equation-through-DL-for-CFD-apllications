@@ -19,7 +19,7 @@ The work is divided with respect to the dissertation chapters as follows:
 
     PINN 3 and 4 are based on the Cauchy-momentum equations and constitutive equations for Newtonian$
 
-##- **Chapter 4** - Surrogate model for CFD pressure solver
+## - **Chapter 4** - Surrogate model for CFD pressure solver
 
   - CNN Neural networks (NN)
     - Full CNN architecture
@@ -28,12 +28,12 @@ The work is divided with respect to the dissertation chapters as follows:
 
   - MLP NN (with PCA based encoder and decoder)
 
-##- **Chapter 5** - DLPoissonFoam solver
+## - **Chapter 5** - DLPoissonFoam solver
 
   - Algorithm 1
 
 
   - Algorithm 2
 
-##- Generate blockMeshDict
+## - Generate blockMeshDict
 
