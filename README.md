@@ -21,10 +21,12 @@ The work is divided with respect to the dissertation chapters as follows:
 
 - **Chapter 4** - Surrogate model for CFD pressure solver
 
-  - CNN models
+  - CNN Neural networks (NN)
     - Full CNN architecture
     - PCA based encoder + CNN
     - PCA based encoder + CNN + PCA based decoder
+
+  - MLP NN (with PCA based encoder and decoder)
 
 - **Chapter 5** - DLPoissonFoam solver
 
