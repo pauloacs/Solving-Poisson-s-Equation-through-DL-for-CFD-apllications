@@ -36,3 +36,5 @@ The work is divided with respect to the dissertation chapters as follows:
   - Algorithm 2
 
 
+ - **Generate blockMeshDict** 
+ Python scripts to generate dictionaries to be used by blockMesh OpenFOAM utility.
