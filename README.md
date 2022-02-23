@@ -35,5 +35,5 @@ The work is divided with respect to the dissertation chapters as follows:
 
   - Algorithm 2
 
-  - Generate blockMeshDict
+-Generate blockMeshDict
 
