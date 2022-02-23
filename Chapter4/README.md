@@ -5,7 +5,7 @@
 Examples
 
 
-![alt text](https://github.com/pauloacs/Solving-Poisson-s-Equation-through-DL-for-CFD-apllications/Chapter4/rect0.gif)
+![alt text](https://github.com/pauloacs/Solving-Poisson-s-Equation-through-DL-for-CFD-apllications/blob/main/Chapter4/rect0.gif)
 
 
 ![alt text](https://github.com/pauloacs/Solving-Poisson-s-Equation-through-DL-for-CFD-apllications/tria0.gif)
