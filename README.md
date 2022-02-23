@@ -1,6 +1,9 @@
 # Solving-Poisson-s-Equation-through-DL-for-CFD-apllications
 
-This repository contains the codes to allow reproduce results from the **Solving Poisson's Equation $
+This repository contains the codes to reproduce the results from **Solving Poisson's Equation through DL for CFD applications** Master's thesis.
+
+The dissertation will be uploaded as soon as its final version is available.
+
 The work is divided with respect to the dissertation chapters as follows:
 
 ## - **Chapter 3** - Preliminary works
@@ -34,7 +37,8 @@ The work is divided with respect to the dissertation chapters as follows:
 	Codes for:
 	- Training 
 	- Predict and evaluate
-	Result examples
+
+	**Open this folder to see result examples**
 
 ## - **Chapter 5** - DLPoissonFoam solver
 
@@ -45,3 +49,4 @@ The work is divided with respect to the dissertation chapters as follows:
 ## - Generate blockMeshDict
 
 Python scripts for generating blockMeshDict files to use with blockMesh utily from OpenFOAM.
+
