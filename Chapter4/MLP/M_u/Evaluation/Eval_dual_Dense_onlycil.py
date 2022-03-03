@@ -448,8 +448,6 @@ class Evaluation():
 
 			############## ------------------//------------------##############################
 
-			print('result array shape {}, grid shape {}'.format(result_array.shape, grid.shape))
-
 			true_mask = grid[0,:,:,3][grid[0,:,:,2] != 0]
 			pred_mask = result_array[0,:,:,0][grid[0,:,:,2] != 0]
 			norm = np.max(grid[0,:,:,3][grid[0,:,:,2] != 0]) - np.min(grid[0,:,:,3][grid[0,:,:,2] != 0])
@@ -460,6 +458,8 @@ class Evaluation():
 			RMSE_norm = np.sqrt(np.mean( ( pred_mask  - true_mask )[mask_nan]**2 ))/norm * 100
 			STDE_norm = np.sqrt( (RMSE_norm**2 - BIAS_norm**2) )
 			
+
+			# This prints the error metrics for each time frame
 			print(f"""
 			normVal  = {norm} Pa
 			biasNorm = {BIAS_norm:.2f}%
@@ -474,21 +474,17 @@ class Evaluation():
 
 	
 
-
-
-### create directory to save the plots
-path='/home/paulo/Desktop/plots/'
-
-try:
-    shutil.rmtree(path)
-except OSError as e:
-    print ("")
-
-os.makedirs(path)
-
-
 def main():
 
+	### THis creates a directory to save the plots
+	path='/home/paulo/Desktop/plots/'
+
+	try:
+		shutil.rmtree(path)
+	except OSError as e:
+		print ("")
+
+	os.makedirs(path)
 
 	###### inputs ########
 	delta = 5e-3
@@ -497,7 +493,8 @@ def main():
 	avance = int(0.75*shape)
 	var_p = 0.95
 	var_in = 0.995
-	hdf5_path = '/home/paulo/dataset_unsteadyCil_fu_bound.hdf5' #adjust path
+	hdf5_path = '' #dataset path
+	#hdf5_path = '/home/paulo/dataset_unsteadyCil_fu_bound.hdf5' #adjust path
 
 
 	Eval = Evaluation(delta, shape, avance, var_p, var_in, hdf5_path, model_directory)
@@ -529,7 +526,6 @@ def main():
 if __name__ == '__main__':
 	main()
 
-
 ####################### TO CREATE A GIF WITH ALL THE FRAMES ###############################
 
 #filenamesp = []
@@ -544,3 +540,4 @@ if __name__ == '__main__':
 #        image = imageio.imread(filename)
 #        writer.append_data(image)
 
+######################## ---------------- //----------------- ###################
