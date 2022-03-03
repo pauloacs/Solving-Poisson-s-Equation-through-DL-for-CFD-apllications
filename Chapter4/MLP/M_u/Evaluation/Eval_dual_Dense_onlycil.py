@@ -27,6 +27,7 @@ import matplotlib.path as mpltPath
 from shapely.geometry import MultiPoint
 from scipy.spatial import distance
 import scipy
+import scipy.ndimage as ndimage
 
 
 class Evaluation():
@@ -189,7 +190,7 @@ class Evaluation():
 
 
 
-	def timeStep(self, sim, time):
+	def timeStep(self, sim, time, save_plots, show_plots, apply_filter):
 
 			data, top_boundary, obst_boundary = self.read_dataset(self.hdf5_path, sim , time)
 			i = 0
@@ -412,39 +413,44 @@ class Evaluation():
 
 			result_array -= np.mean( 3* result_array[:,:,-1,:] - result_array[:,:,-2,:] )/3
 
-			#import scipy.ndimage as ndimage
-
-	#		result_array = ndimage.gaussian_filter(result_array[0,:,:,0], sigma=(10, 10), order=0)
 
 
-			################# uncoment this to plot predictions ###################################
+			################### this applies a gaussian filter to remove boundary artifacts #################
+			if apply_filter:
 
-			# masked_arr = np.ma.array(result_array[0,:,:,0], mask=(grid[0,:,:,2] == 0))
-			# fig, axs = plt.subplots(3,1, figsize=(65, 15))
+				result_array = ndimage.gaussian_filter(result_array[0,:,:,0], sigma=(10, 10), order=0)
 
-			# vmax = np.max(grid[0,:,:,3])
-			# vmin = np.min(grid[0,:,:,3])
+			################## ----------------//---------------####################################
 
-			# axs[0].set_title('Prediction', fontsize = 15)
-			# cf = axs[0].imshow(masked_arr, interpolation='nearest', cmap='jet')#, vmax = vmax, vmin = vmin )
-			# plt.colorbar(cf, ax=axs[0])
+			if save_plots:
 
-			# masked_arr = np.ma.array(grid[0,:,:,3], mask=(grid[0,:,:,2] == 0))
+				masked_arr = np.ma.array(result_array[0,:,:,0], mask=(grid[0,:,:,2] == 0))
+				fig, axs = plt.subplots(3,1, figsize=(65, 15))
 
-			# axs[1].set_title('CFD', fontsize = 15)
-			# cf = axs[1].imshow(masked_arr, interpolation='nearest', cmap='jet')#, vmax = vmax, vmin = vmin)
-			# plt.colorbar(cf, ax=axs[1])
+				vmax = np.max(grid[0,:,:,3])
+				vmin = np.min(grid[0,:,:,3])
 
-			# masked_arr = np.ma.array( np.abs(( grid[0,:,:,3] -result_array[0,:,:,0] )/(np.max(grid[0,:,:,3]) -np.min(grid[0,:,:,3]))*100) , mask=(grid[0,:,:,2] == 0))
+				axs[0].set_title('Prediction', fontsize = 15)
+				cf = axs[0].imshow(masked_arr, interpolation='nearest', cmap='jet')#, vmax = vmax, vmin = vmin )
+				plt.colorbar(cf, ax=axs[0])
 
-			# axs[2].set_title('error in %', fontsize = 15)
-			# cf = axs[2].imshow(masked_arr, interpolation='nearest', cmap='jet', vmax = 10, vmin=0 )
-			# plt.colorbar(cf, ax=axs[2])
+				masked_arr = np.ma.array(grid[0,:,:,3], mask=(grid[0,:,:,2] == 0))
 
-			# plt.show()
+				axs[1].set_title('CFD', fontsize = 15)
+				cf = axs[1].imshow(masked_arr, interpolation='nearest', cmap='jet')#, vmax = vmax, vmin = vmin)
+				plt.colorbar(cf, ax=axs[1])
 
-			# plt.savefig('/home/paulo/Desktop/plots/' + str(i) + '.png')
-			#plt.close()
+				masked_arr = np.ma.array( np.abs(( grid[0,:,:,3] -result_array[0,:,:,0] )/(np.max(grid[0,:,:,3]) -np.min(grid[0,:,:,3]))*100) , mask=(grid[0,:,:,2] == 0))
+
+				axs[2].set_title('error in %', fontsize = 15)
+				cf = axs[2].imshow(masked_arr, interpolation='nearest', cmap='jet', vmax = 10, vmin=0 )
+				plt.colorbar(cf, ax=axs[2])
+
+				if show_plots:
+					plt.show()
+
+				plt.savefig('/home/paulo/Desktop/plots/' + str(i) + '.png')
+				plt.close()
 
 			############## ------------------//------------------##############################
 
@@ -493,8 +499,12 @@ def main():
 	avance = int(0.75*shape)
 	var_p = 0.95
 	var_in = 0.995
-	hdf5_path = '' #dataset path
-	#hdf5_path = '/home/paulo/dataset_unsteadyCil_fu_bound.hdf5' #adjust path
+	#hdf5_path = '' #dataset path
+	hdf5_path = '/home/paulo/dataset_unsteadyCil_fu_bound.hdf5' #adjust dataset path
+
+	save_plots = True
+	show_plots = True
+	apply_filter = False
 
 
 	Eval = Evaluation(delta, shape, avance, var_p, var_in, hdf5_path, model_directory)
@@ -509,7 +519,7 @@ def main():
 
 		for time in range(10):
 
-			Eval.timeStep(sim, time)
+			Eval.timeStep(sim, time, save_plots, show_plots, apply_filter)
 
 	#np.savetxt('errors', error)
 
