@@ -52,8 +52,8 @@ class Evaluation():
 		self.pcainput = pk.load(open("ipca_input_more.pkl",'rb'))
 		self.pcap = pk.load(open("ipca_p_more.pkl",'rb'))
 
-		self.pc_p = np.argmax(self.pcap.explained_variance_ratio_.cumsum() > 0.95) if np.argmax(self.pcap.explained_variance_ratio_.cumsum() > 0.95) > 1 and np.argmax(self.pcap.explained_variance_ratio_.cumsum() > 0.95) <= 64 else 64  #max defined to be 32 here
-		self.pc_in = np.argmax(self.pcainput.explained_variance_ratio_.cumsum() > 0.995) if np.argmax(self.pcainput.explained_variance_ratio_.cumsum() > 0.995) > 1 and np.argmax(self.pcainput.explained_variance_ratio_.cumsum() > 0.995) <= 64 else 64
+		self.pc_p = np.argmax(self.pcap.explained_variance_ratio_.cumsum() > self.var_p) if np.argmax(self.pcap.explained_variance_ratio_.cumsum() > self.var_p) > 1 and np.argmax(self.pcap.explained_variance_ratio_.cumsum() > 0.95) <= 64 else 64  #max defined to be 32 here
+		self.pc_in = np.argmax(self.pcainput.explained_variance_ratio_.cumsum() > self.var_in) if np.argmax(self.pcainput.explained_variance_ratio_.cumsum() > self.var_in) > 1 and np.argmax(self.pcainput.explained_variance_ratio_.cumsum() > 0.995) <= 64 else 64
 
 
 	def interp_weights(self, xyz, uvw):
