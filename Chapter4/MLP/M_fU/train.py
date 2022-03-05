@@ -768,7 +768,7 @@ def main():
   delta = 5e-3
   modes_PCA = 512
   var_p = 0.95
-  var_in = 0.995
+  var_in = 0.95
 
   # # #if not prepare data ##############################
   # ipca_p = pk.load(open("ipca_p_more.pkl",'rb'))
