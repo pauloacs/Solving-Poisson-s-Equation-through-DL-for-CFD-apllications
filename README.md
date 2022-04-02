@@ -46,6 +46,8 @@ The work is divided with respect to the dissertation chapters as follows:
 
   - Algorithm 2
 
+  - Added parallelized implementation
+
 ## - Generate blockMeshDict
 
 Python scripts for generating blockMeshDict files to use with blockMesh utily from OpenFOAM.

@@ -1,0 +1,76 @@
+I/O    : uncollated
+Case   : /opt/pySid/DLPoissonFoamPISO/poissonDLFoam_piso/paralel/n_1/DL
+nProcs : 4
+Slaves : 
+3
+(
+"paulo-GL552VW.32079"
+"paulo-GL552VW.32080"
+"paulo-GL552VW.32081"
+)
+
+Pstream initialized with:
+    floatTransfer      : 0
+    nProcsSimpleSum    : 0
+    commsType          : nonBlocking
+    polling iterations : 0
+Create time
+
+Create mesh for time = 1.5
+
+Reading field p
+
+Reading field U
+
+Using dynamicCode for fixedValueFvPatchField parabolicVelocityProfile at line 7926 in "/opt/pySid/DLPoissonFoamPISO/poissonDLFoam_piso/paralel/n_1/DL/processor0/1.5/U/boundaryField/inlet"
+Reading/calculating face flux field phi
+
+Selecting incompressible transport model Newtonian
+Selecting turbulence model type laminar
+Selecting laminar stress model Stokes
+No MRF models present
+
+No finite volume options present
+[paulo-GL552VW:32081] *** Process received signal ***
+[paulo-GL552VW:32081] Signal: Segmentation fault (11)
+[paulo-GL552VW:32081] Signal code: Address not mapped (1)
+[paulo-GL552VW:32081] Failing at address: 0x8
+[paulo-GL552VW:32081] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x3ef10)[0x7f4931e9cf10]
+[paulo-GL552VW:32081] [ 1] /usr/lib/x86_64-linux-gnu/libpython3.6m.so.1.0(PyObject_GetAttrString+0x0)[0x7f4933b54c00]
+[paulo-GL552VW:32081] [ 2] DLPoissonFoam(+0x268fe)[0x558b918868fe]
+[paulo-GL552VW:32081] [ 3] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0xe7)[0x7f4931e7fc87]
+[paulo-GL552VW:32081] [ 4] DLPoissonFoam(+0x29e4a)[0x558b91889e4a]
+[paulo-GL552VW:32081] *** End of error message ***
+[paulo-GL552VW:32079] *** Process received signal ***
+[paulo-GL552VW:32079] Signal: Segmentation fault (11)
+[paulo-GL552VW:32079] Signal code: Address not mapped (1)
+[paulo-GL552VW:32079] Failing at address: 0x8
+[paulo-GL552VW:32079] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x3ef10)[0x7ff7d7c85f10]
+[paulo-GL552VW:32079] [ 1] /usr/lib/x86_64-linux-gnu/libpython3.6m.so.1.0(PyObject_GetAttrString+0x0)[0x7ff7d993dc00]
+[paulo-GL552VW:32079] [ 2] DLPoissonFoam(+0x268fe)[0x56074c98f8fe]
+[paulo-GL552VW:32079] [ 3] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0xe7)[0x7ff7d7c68c87]
+[paulo-GL552VW:32079] [ 4] DLPoissonFoam(+0x29e4a)[0x56074c992e4a]
+[paulo-GL552VW:32079] *** End of error message ***
+[paulo-GL552VW:32078] *** Process received signal ***
+[paulo-GL552VW:32078] Signal: Segmentation fault (11)
+[paulo-GL552VW:32078] Signal code: Address not mapped (1)
+[paulo-GL552VW:32078] Failing at address: 0x8
+[paulo-GL552VW:32078] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x3ef10)[0x7f723102bf10]
+[paulo-GL552VW:32078] [ 1] /usr/lib/x86_64-linux-gnu/libpython3.6m.so.1.0(PyObject_GetAttrString+0x0)[0x7f7232ce3c00]
+[paulo-GL552VW:32078] [ 2] DLPoissonFoam(+0x268fe)[0x56338b8c08fe]
+[paulo-GL552VW:32078] [ 3] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0xe7)[0x7f723100ec87]
+[paulo-GL552VW:32078] [ 4] DLPoissonFoam(+0x29e4a)[0x56338b8c3e4a]
+[paulo-GL552VW:32078] *** End of error message ***
+[paulo-GL552VW:32080] *** Process received signal ***
+[paulo-GL552VW:32080] Signal: Segmentation fault (11)
+[paulo-GL552VW:32080] Signal code: Address not mapped (1)
+[paulo-GL552VW:32080] Failing at address: 0x8
+[paulo-GL552VW:32080] [ 0] /lib/x86_64-linux-gnu/libc.so.6(+0x3ef10)[0x7f37ed235f10]
+[paulo-GL552VW:32080] [ 1] /usr/lib/x86_64-linux-gnu/libpython3.6m.so.1.0(PyObject_GetAttrString+0x0)[0x7f37eeeedc00]
+[paulo-GL552VW:32080] [ 2] DLPoissonFoam(+0x268fe)[0x55e8e21c68fe]
+[paulo-GL552VW:32080] [ 3] /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0xe7)[0x7f37ed218c87]
+[paulo-GL552VW:32080] [ 4] DLPoissonFoam(+0x29e4a)[0x55e8e21c9e4a]
+[paulo-GL552VW:32080] *** End of error message ***
+--------------------------------------------------------------------------
+mpiexec noticed that process rank 3 with PID 0 on node paulo-GL552VW exited on signal 11 (Segmentation fault).
+--------------------------------------------------------------------------
