@@ -58,9 +58,9 @@ The work is divided with respect to the dissertation chapters as follows:
   Using 
   
   ```sh
-  docker run -it  dlpoissonfoam/ofv8:latest bash
-  source /opt/conda/bin/activate
-  conda activate python39
+  $ docker run -it  dlpoissonfoam/ofv8:latest bash
+  $ source /opt/conda/bin/activate
+  $ conda activate python39
   ```
   will create a docker container and run it in a shell. In `/home/foam` a file with the solver and a test case is available. 
   
