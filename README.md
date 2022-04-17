@@ -51,8 +51,11 @@ The work is divided with respect to the dissertation chapters as follows:
 
   ### Docker
   
-  To allow reproducibility a docker container with the solver is available here. Ensuring you already have the docker installed the container can be pulled with 
-  ´´´ docker pull pauloacs/dlpoissonfoam:latest ´´´
+  To allow reproducibility a docker container with the solver is available here. Ensuring you already have the docker installed the container can be pulled with
+  
+  ```sh
+  $ docker pull pauloacs/dlpoissonfoam:latest ´´´
+  ```
   
 ## - Generate blockMeshDict
 
