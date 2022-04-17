@@ -23,8 +23,6 @@ The work is divided with respect to the dissertation chapters as follows:
 
     PINN 3 and 4 are based on the Cauchy-momentum equations and constitutive equations for Newtonian fluid.
 
-![alt text](https://github.com/pauloacs/Solving-Poisson-s-Equation-through-DL-for-CFD-apllications/blob/main/Chapter3/plot_pressure.png)
-
 ## - **Chapter 4** - Surrogate model for CFD pressure solver
 
   - CNN Neural networks (NN)
@@ -64,7 +62,7 @@ The work is divided with respect to the dissertation chapters as follows:
   source /opt/conda/bin/activate
   conda activate python39
   ```
-  will create a docker container and run it in a shell. In '/home/foam' a file with the solver and a test case is available. 
+  will create a docker container and run it in a shell. In `/home/foam` a file with the solver and a test case is available. 
   
 ## - Generate blockMeshDict
 
