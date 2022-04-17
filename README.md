@@ -49,6 +49,11 @@ The work is divided with respect to the dissertation chapters as follows:
 
   - Added parallelized implementation
 
+  ### Docker
+  
+  To allow reproducibility a docker container with the solver is available here. Ensuring you already have the docker installed the container can be pulled with 
+  ´´´ docker pull pauloacs/dlpoissonfoam:latest ´´´
+  
 ## - Generate blockMeshDict
 
 Python scripts for generating blockMeshDict files to use with blockMesh utily from OpenFOAM.
