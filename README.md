@@ -2,7 +2,7 @@
 
 This repository contains the codes to reproduce the results from **Solving Poisson's Equation through DL for CFD applications** Master's thesis.
 
-The dissertation can be found at FEUP repository: https://sigarra.up.pt/feup/pt/pub_geral.pub_view?pi_pub_base_id=547360
+The dissertation can be found at FEUP repository: https://sigarra.up.pt/feup/en/pub_geral.pub_view?pi_pub_base_id=547360
 
 
 The work is divided with respect to the dissertation chapters as follows:
