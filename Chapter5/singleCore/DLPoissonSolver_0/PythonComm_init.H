@@ -1,21 +1,56 @@
-/*double** input_vals;*/
+/*The following stuff is for Python interoperability*/
+
+Py_Initialize();
+PyRun_SimpleString("import sys");
+PyRun_SimpleString("sys.path.append(\".\")");
+
+// initialize numpy array library
+import_array1(-1);
+
+PyObject *pName = PyUnicode_DecodeFSDefault("python_module"); // Python filename
+PyObject *pModule = PyImport_Import(pName);
+Py_DECREF(pName);
+
+PyObject *py_func = PyObject_GetAttrString(pModule, "py_func");
+PyObject *py_args = PyTuple_New(1);
+
+PyObject *init_func = PyObject_GetAttrString(pModule, "init_func");
+PyObject *init_args = PyTuple_New(3);
+
+Py_DECREF(pModule);
+
+PyObject *array_2d(nullptr);
+PyObject *array_2d_top(nullptr);
+PyObject *array_2d_obst(nullptr);
+PyArrayObject *pValue;
+
+/*// Placeholder to grab data before sending to Python*/
+int num_cells = mesh.cells().size();
+
+label top_patchID = mesh.boundaryMesh().findPatchID("top");
+int num_cells_top = p.boundaryField()[top_patchID].size();
+
+label obst_patchID = mesh.boundaryMesh().findPatchID("obstacle");
+int num_cells_obstacle = p.boundaryField()[obst_patchID].size();
+
+/*Done importing Python functionality*/
+
 const int row = num_cells;
-const int col = 5; 
+const int col = 5;
 
 const int row_top = num_cells_top;
-const int col_top = 2; 
+const int col_top = 2;
 
 const int row_obst = num_cells_obstacle;
-const int col_obst = 2; 
+const int col_obst = 2;
 
-int i, j;
 
 double(*input_vals)[col]{ new double[row][col] };
 double(*input_vals_top)[col_top]{ new double[row_top][col_top] };
 double(*input_vals_obst)[col_obst]{ new double[row_obst][col_obst] };
 
 
-forAll(f_U.internalField(), id) // for boundary field use u_.boundaryField()
+forAll(p.internalField(), id) // for boundary field use u_.boundaryField()
 {
         input_vals[id][0] = U[id].x();
         input_vals[id][1] = U[id].y();
@@ -46,10 +81,10 @@ array_2d = PyArray_SimpleNewFromData(2, dim, NPY_DOUBLE, reinterpret_cast<void*>
 array_2d_top = PyArray_SimpleNewFromData(2, dim_top, NPY_DOUBLE, reinterpret_cast<void*>(input_vals_top));
 array_2d_obst = PyArray_SimpleNewFromData(2, dim_obstacle, NPY_DOUBLE, reinterpret_cast<void*>(input_vals_obst));
 
-PyTuple_SetItem(py_args1, 0, array_2d);
-PyTuple_SetItem(py_args1, 1, array_2d_top);
-PyTuple_SetItem(py_args1, 2, array_2d_obst);
+PyTuple_SetItem(init_args, 0, array_2d);
+PyTuple_SetItem(init_args, 1, array_2d_top);
+PyTuple_SetItem(init_args, 2, array_2d_obst);
 
-(void) PyObject_CallObject(py_func1, py_args1);
+(void) PyObject_CallObject(init_func, init_args);
 
 

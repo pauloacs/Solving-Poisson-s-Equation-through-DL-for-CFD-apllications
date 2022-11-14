@@ -49,8 +49,14 @@ This is a modificatin to pisoFoam solver.
 
 /*The following stuff is for Python interoperability*/
 #include <Python.h>
-#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
+#define NPY_NO_DEPRECATED_API NPY_1_8_API_VERSION
+#define PY_ARRAY_UNIQUE_SYMBOL POD_ARRAY_API
 #include <numpy/arrayobject.h>
+
+//void init_numpy() {
+//  import_array1();
+//}
+
 /*Done importing Python functionality*/
 #include <cmath>
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
@@ -58,13 +64,20 @@ This is a modificatin to pisoFoam solver.
 int main(int argc, char *argv[])
 {
 
+    // create argument list
+    Foam::argList args(argc, argv, true,true,/*initialise=*/false);
+    if (!args.checkRootCase())
+    {
+        Foam::FatalError.exit();
+    }
+
     // Some time related variables
     struct timespec tw1, tw2;
     double posix_wall;
 
     #include "postProcess.H"
 
-    #include "setRootCaseLists.H"
+    //#include "setRootCaseLists.H"
     #include "createTime.H"
     #include "createMesh.H"
     #include "createControl.H"
@@ -72,7 +85,6 @@ int main(int argc, char *argv[])
     #include "initContinuityErrs.H"
 
     #include "PythonComm_init.H" //this initializes the arrays dependent on the static mesh
-
 
     turbulence->validate();
 
@@ -91,14 +103,16 @@ int main(int argc, char *argv[])
         // Pressure-velocity PISO corrector
         {
 
+            #include "UEqn.H"
+
             clock_gettime(CLOCK_MONOTONIC, &tw1); // POSIX
             // Talk to Python
 	    #include "PythonComm.H"
             clock_gettime(CLOCK_MONOTONIC, &tw2); // POSIX
             posix_wall = 1000.0*tw2.tv_sec + 1e-6*tw2.tv_nsec - (1000.0*tw1.tv_sec + 1e-6*tw1.tv_nsec);
             printf("DL pressure prediction & data transport: %.2f ms\n", posix_wall);
- 
-            #include "UEqn.H"
+            //runTime.write();
+            //#include "UEqn.H"
 
 		    // --- PISO loop
 		    while (piso.correct())
