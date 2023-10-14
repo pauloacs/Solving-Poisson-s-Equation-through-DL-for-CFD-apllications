@@ -36,8 +36,12 @@ The work is divided with respect to the dissertation chapters as follows:
 	Codes for:
 	- Training 
 	- Predict and evaluate
+    
+  - Domain reconstruction algorithm
 
-  - Result examples
+![Reconstr](Chapter4/animations/reconstruction.gif)
+
+  - Result examples (check additonal examples in Chapter4/animations)
 
 | Circular obstacle                         | Rectangular obstacle                        |
 | ------------------------------ | ------------------------------ |
