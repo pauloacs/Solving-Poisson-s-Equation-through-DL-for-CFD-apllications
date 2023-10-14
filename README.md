@@ -32,23 +32,23 @@ The work is divided with respect to the dissertation chapters as follows:
     - PCA based encoder + CNN + PCA based decoder
 
   - MLP NN (with PCA based encoder and decoder)
-
-	Codes for:
-	- Training 
-	- Predict and evaluate
     
-|                  Reconstruction algorithm                  |
-| ---------------------------------------------------------- |
-| <p align="center"><img src="Chapter4/animations/reconstruction.gif" width="380" alt="Reconstruction algorithm"></p> |
+	|                  Reconstruction algorithm                  |
+	| ---------------------------------------------------------- |
+	| <p align="center"><img src="Chapter4/animations/reconstruction.gif" width="380" alt="Reconstruction algorithm"></p> |
+	
+	  - Result examples (check additonal examples in Chapter4/animations)
+	
+	| Circular obstacle                         | Rectangular obstacle                        |
+	| ------------------------------ | ------------------------------ |
+	| ![GIF 1](Chapter4/animations/cil0.gif) | ![GIF 2](Chapter4/animations/rect0.gif) |
+	| Triangular obstacle                         | Inclined plate obstacle                       |
+	| ![GIF 3](Chapter4/animations/tria0.gif) | ![GIF 4](Chapter4/animations/placa0.gif) |
 
-  - Result examples (check additonal examples in Chapter4/animations)
-
-| Circular obstacle                         | Rectangular obstacle                        |
-| ------------------------------ | ------------------------------ |
-| ![GIF 1](Chapter4/animations/cil0.gif) | ![GIF 2](Chapter4/animations/rect0.gif) |
-| Triangular obstacle                         | Inclined plate obstacle                       |
-| ![GIF 3](Chapter4/animations/tria0.gif) | ![GIF 4](Chapter4/animations/placa0.gif) |
-
+	Code available for:
+	- Training 
+	- Prediction and validation
+ 
 ## - **Chapter 5** - DLPoissonFoam solver
 
   - Algorithm 1
