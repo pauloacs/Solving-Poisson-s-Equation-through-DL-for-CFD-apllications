@@ -13,7 +13,7 @@ The work is divided with respect to the dissertation chapters as follows:
 
 	|                 Results example                 |
 	| ---------------------------------------------------------- |
-	| <p align="center"><img src="Chapter3/animations/p_movie.gif"</p> |
+	| <p align="center"><img src="Chapter3/animations/p_movie.gif"></p> |
 
   - Physics-informed Neural Networks (PINN)
 
@@ -29,7 +29,7 @@ The work is divided with respect to the dissertation chapters as follows:
 
 	|                 Results validation               |
 	| ---------------------------------------------------------- |
-	| <p align="center"><img src="Chapter3/plot_pressure.png"</p> |
+	| <p align="center"><img src="Chapter3/plot_pressure.png"></p> |
 
 ## - **Chapter 4** - Surrogate model for CFD pressure solver
 
