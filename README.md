@@ -37,11 +37,9 @@ The work is divided with respect to the dissertation chapters as follows:
 	- Training 
 	- Predict and evaluate
     
-  - Domain reconstruction algorithm
-
-<div style="text-align:center;">
-  <img src="Chapter4/animations/reconstruction.gif" width="380" alt="Reconstruction algorithm">
-</div>
+|                  Reconstruction algorithm                  |
+| ---------------------------------------------------------- |
+| <p align="center"><img src="Chapter4/animations/reconstruction.gif" width="380" alt="Reconstruction algorithm"></p> |
 
   - Result examples (check additonal examples in Chapter4/animations)
 
