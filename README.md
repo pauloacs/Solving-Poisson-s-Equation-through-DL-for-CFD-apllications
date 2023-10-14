@@ -11,6 +11,10 @@ The work is divided with respect to the dissertation chapters as follows:
 - 
   - Data-driven methods
 
+	|                 Results example                 |
+	| ---------------------------------------------------------- |
+	| <p align="center"><img src="Chapter3/animations/p_movie.gif"</p> |
+
   - Physics-informed Neural Networks (PINN)
 
     - PINN 1
@@ -22,6 +26,10 @@ The work is divided with respect to the dissertation chapters as follows:
     - PINN 4
 
     PINN 3 and 4 are based on the Cauchy-momentum equations and constitutive equations for Newtonian fluid.
+
+	|                 Results validation               |
+	| ---------------------------------------------------------- |
+	| <p align="center"><img src="Chapter3/plot_pressure.png"</p> |
 
 ## - **Chapter 4** - Surrogate model for CFD pressure solver
 
