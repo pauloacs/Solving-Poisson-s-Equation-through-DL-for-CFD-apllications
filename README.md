@@ -69,9 +69,9 @@ The work is divided with respect to the dissertation chapters as follows:
 
   - Added parallelized implementation
 
-  ### Docker
-  
-  To allow reproducibility a docker container with the solver is available here. Ensuring you already have the docker installed the container can be pulled with
+  ### Running with Docker
+
+  To ensure reproducibility, a Docker container with the solver is provided. If you already have Docker installed, you can pull the container with the following command:
   
   ```sh
   $ docker pull pauloacs/dlpoissonfoam:latest
@@ -80,12 +80,12 @@ The work is divided with respect to the dissertation chapters as follows:
   Using 
   
   ```sh
-  $ docker run -it  dlpoissonfoam/ofv8:latest bash
+  $ docker run -it dlpoissonfoam/ofv8:latest bash
   $ source /opt/conda/bin/activate
   $ conda activate python39
   ```
-  will create a docker container and run it in a shell. In `/home/foam` a file with the solver and a test case is available. 
-  
+  This will create a Docker container and launch a shell. Inside the /home/foam directory, you'll find the solver and a test case.  
+
 ## - Generate blockMeshDict
 
 Python scripts for generating blockMeshDict files to use with blockMesh utily from OpenFOAM.
