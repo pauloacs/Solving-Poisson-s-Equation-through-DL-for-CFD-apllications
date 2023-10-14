@@ -37,7 +37,13 @@ The work is divided with respect to the dissertation chapters as follows:
 	- Training 
 	- Predict and evaluate
 
-	**Open the Chapter4/ folder to see examples**
+  - Result examples
+
+| Circular obstacle                         | Rectangular obstacle                        |
+| ------------------------------ | ------------------------------ |
+| ![GIF 1](Chapter4/animations/cil0.gif) | ![GIF 2](Chapter4/animations/rect0.gif) |
+| Triangular obstacle                         | Inclined plate obstacle                       |
+| ![GIF 3](Chapter4/animations/tria0.gif) | ![GIF 4](Chapter4/animations/placa0.gif) |
 
 ## - **Chapter 5** - DLPoissonFoam solver
 
