@@ -37,7 +37,7 @@ The work is divided with respect to the dissertation chapters as follows:
 	- Training 
 	- Predict and evaluate
 
-	**Open this folder to see result examples**
+	**Open the Chapter4/ folder to see examples**
 
 ## - **Chapter 5** - DLPoissonFoam solver
 
