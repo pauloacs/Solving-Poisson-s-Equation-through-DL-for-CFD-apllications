@@ -80,7 +80,7 @@ The work is divided with respect to the dissertation chapters as follows:
   Using 
   
   ```sh
-  $ docker run -it dlpoissonfoam/ofv8:latest bash
+  $ docker run -it pauloacs/dlpoissonfoam bash
   $ source /opt/conda/bin/activate
   $ conda activate python39
   ```
