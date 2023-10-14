@@ -63,6 +63,10 @@ The work is divided with respect to the dissertation chapters as follows:
 
   - Algorithm 2
 
+	|                 Algorithm schematic                |
+	| ---------------------------------------------------------- |
+	| <p align="center"><img src="Chapter5/alg2_schematic.png"></p> |
+
   - Added parallelized implementation
 
   ### Docker
