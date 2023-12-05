@@ -1,0 +1,80 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  6
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volVectorField;
+    object      U;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 1 -1 0 0 0 0];
+
+internalField   uniform (0 0 0);
+
+boundaryField
+{
+
+    outlet
+    {
+        type            pressureInletOutletVelocity;
+        value           uniform (0 0 0);
+    }
+    "(top|obstacle)"
+    {
+        type            noSlip;
+    }
+
+    inlet
+    {
+        type            codedFixedValue;
+        value           $internalField; //$internalField
+        redirectType    parabolicVelocityProfile;
+        
+        code 
+        #{
+
+		//const scalar t = this->db().time().value();
+		//scalar step = min(1,0.2*t);
+
+		scalar U_ave = 1, h=0.5;
+		
+		const fvPatch& boundaryPatch = patch();
+		vectorField& field = *this;
+
+		forAll(boundaryPatch, faceI) 
+		{
+			field[faceI] = vector( 1.5 * U_ave * ( 1 - Foam::pow(boundaryPatch.Cf()[faceI].y()/h ,2)), 0 , 0);
+		}
+        #};	
+
+        codeOptions
+        #{
+		-I$(LIB_SRC)/finiteVolume/lnInclude \
+                -I$(LIB_SRC)/meshTools/lnInclude 
+        #}; 
+
+        codeInclude
+        #{
+		#include "fvCFD.H"
+                #include <cmath>
+                #include <iostream> 
+        #}; 
+
+    }
+
+
+
+    defaultFaces
+    {
+        type            empty;
+    }
+}
+
+// ************************************************************************* //
