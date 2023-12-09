@@ -1,7 +1,7 @@
 import argparse
 
 
-def gen_blockMeshDict(x_cord, x_cord2, y_cord,cell_scale, grad):
+def gen_blockMeshDict(x_cord, x_cord2, y_cord, cell_scale, grad):
     """
     Create a `blockMeshDict` file for the geometry
     """
@@ -157,9 +157,9 @@ def gen_blockMeshDict(x_cord, x_cord2, y_cord,cell_scale, grad):
 # Total cell 7500
 
 parser = argparse.ArgumentParser(description="Generating blockMeshDict file for the geometry")
-parser.add_argument("x_cord", help="X coordinate of forward step")
-parser.add_argument("x_cord2", help="X2 coordinate of forward step")
-parser.add_argument("y_cord", help="Y coordinate of forward step")
+parser.add_argument("x_cord", help="Left side of triangle x location")
+parser.add_argument("x_cord2", help="Right side of triangle x location")
+parser.add_argument("y_cord", help="Half-height of the triangle")
 parser.add_argument("cell_scale", help="scale to adjust the level of refinement")
 parser.add_argument("grad", help="grading")
 args = parser.parse_args()
