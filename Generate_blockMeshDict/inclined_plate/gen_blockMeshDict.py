@@ -178,11 +178,11 @@ def gen_blockMeshDict(x_cord, L, b, alpha, cell_scale, grading):
 # Total cell 7500
 
 parser = argparse.ArgumentParser(description="Generating blockMeshDict file for the geometry")
-parser.add_argument("x_cord", help="X coordinate of forward step")
-parser.add_argument("L", help="length")
-parser.add_argument("b", help="")
+parser.add_argument("x_cord", help="plate x location")
+parser.add_argument("L", help="plate length")
+parser.add_argument("b", help="plate width")
 parser.add_argument("alpha", help="angle of attack")
-parser.add_argument("cell_scale", help="define the refinement level")
+parser.add_argument("cell_scale", help="refinement level")
 parser.add_argument("grading", help="grading")
 
 
