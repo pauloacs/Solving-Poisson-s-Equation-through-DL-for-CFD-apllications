@@ -1,12 +1,12 @@
 import argparse
 
 
-def gen_blockMeshDict(r_int, y_max, scale):
+def gen_blockMeshDict(r_int, y_max, refinement):
     """
     Create a `blockMeshDict` file for the geometry
     """
 
-    scale_for_cells = 40 * scale
+    scale_for_cells = 40 * refinement
 
     scale = 1
     z = 0.05
@@ -193,4 +193,4 @@ parser.add_argument("y_max", help="Channel half height)
 parser.add_argument("refinement", help="Refinement level")
 
 args = parser.parse_args()
-gen_blockMeshDict( float(args.r_int), float(args.y_max)  )
+gen_blockMeshDict( float(args.r_int), float(args.y_max), float(args.refinement) )
