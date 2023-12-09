@@ -26,7 +26,7 @@ def gen_blockMeshDict(x_cord, x_cord2, y_cord, cell_scale, grading):
     total_cells_x = x_max * scale_for_cells*2
     total_cells_y = y_max * scale_for_cells *2 + y_cell*0.2
 
-    y_cell2 = int((total_cells_y - y_cell + y_cell) ) #as y_cord gets bigger, the finner the mesh must be in this region, therefore I apply a factor varying with y_cord
+    y_cell2 = int((total_cells_y - y_cell + y_cell) ) #as y_cord gets bigger, the finer the mesh must be in this region, therefore I apply a factor varying with y_cord
     x_cell3 = int(total_cells_x - x_cell - x_cell2)
 
     # Open file
@@ -172,10 +172,10 @@ def gen_blockMeshDict(x_cord, x_cord2, y_cord, cell_scale, grading):
 # Total cell 7500
 
 parser = argparse.ArgumentParser(description="Generating blockMeshDict file for the geometry")
-parser.add_argument("x_cord", help="X coordinate of forward step")
-parser.add_argument("x_cord2", help="X2 coordinate of forward step")
-parser.add_argument("y_cord", help="Y coordinate of forward step")
-parser.add_argument("cell_scale", help="define the refinement level")
+parser.add_argument("x_cord", help="Rectangle left side x position")
+parser.add_argument("x_cord2", help="Rectangle right side x position")
+parser.add_argument("y_cord", help="Height of the rectangle (the height of the channel is fixed)")
+parser.add_argument("cell_scale", help="Refinement level")
 parser.add_argument("grading", help="grading")
 
 args = parser.parse_args()
