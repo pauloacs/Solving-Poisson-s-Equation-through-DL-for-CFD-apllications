@@ -189,7 +189,7 @@ def gen_blockMeshDict(r_int, y_max, refinement):
 
 parser = argparse.ArgumentParser(description="Generating blockMeshDict file for the geometry")
 parser.add_argument("r_int", help="Cylinder radius")
-parser.add_argument("y_max", help="Channel half height)
+parser.add_argument("y_max", help="Channel half height")
 parser.add_argument("refinement", help="Refinement level")
 
 args = parser.parse_args()
