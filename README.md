@@ -9,7 +9,7 @@ This folder contains the work from a master thesis. It includes the implementati
 
 This folder consists of later works focused on improving the surrogate model developed in Chapter 4 of the master thesis. It includes additional experiments, optimizations, and enhancements to the existing model. Additionally, there are two additional frameworks introduced in this folder, as described in the README.md file inside the improved_sm folder. These frameworks aim to improve generalization and accuracy.
 
-## 3. DLPISOFOAM Repository
+## 3. DLpisoFoam Repository
 
 Although this repository focus on the surrogate models developed, the [DLpisoFoam](https://github.com/pauloacs/DLpisoFoam) repository contains an implementation of an OPENFOAM CFD solver capable of using these surrogate models. You can find more information about this implementation in the [DLpisoFoam](https://github.com/pauloacs/DLpisoFoam) repository.
 
