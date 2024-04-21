@@ -98,7 +98,7 @@ class Training:
     return XX0.flatten(), YY0.flatten()
 
 
-  def densePCA(self, n_layers, depth=512, dropout_rate=False):
+  def densePCA(self, n_layers, depth=512, dropout_rate=None):
     """
     Creates the MLP NN.
     """
@@ -107,10 +107,10 @@ class Training:
     if len(depth) == 1:
       depth = [depth]*n_layers
     x = tf.keras.layers.Dense(depth[0], activation='relu')(inputs)
-    if dropout_rate: x = tf.keras.layers.Dropout(0.2)(x)
+    if None is not dropout_rate: x = tf.keras.layers.Dropout(dropout_rate)(x)
     for i in range(n_layers - 1):
       x = tf.keras.layers.Dense(depth[i+1], activation='relu')(x)
-      if dropout_rate: x = tf.keras.layers.Dropout(0.2)(x)
+      if None is not dropout_rate: x = tf.keras.layers.Dropout(dropout_rate)(x)
     outputs = tf.keras.layers.Dense(self.PC_p)(x)
 
     model = Model(inputs, outputs, name="MLP")
@@ -172,6 +172,18 @@ class Training:
     delta_Uy = data_limited[...,6:7] #values
 
     U_max_norm = np.max(np.sqrt(np.square(Ux) + np.square(Uy)))
+    deltaU_max_norm = np.max(np.sqrt(np.square(delta_Ux) + np.square(delta_Uy)))
+    # Ignore time steps with minimal changes ...
+    # there is not point in computing error metrics for these
+    # it would exagerate the delta_p errors and give ~0% errors in p
+    threshold = 1e-4
+    print(deltaU_max_norm)
+    print(U_max_norm)
+    irrelevant_ts = (deltaU_max_norm/U_max_norm) < threshold
+
+    if irrelevant_ts:
+       print(f"\n\n Irrelevant time step, skipping it...")
+       return 0
 
     delta_p_adim = delta_p/pow(U_max_norm,2.0) 
     delta_Ux_adim = delta_Ux/U_max_norm 
@@ -224,19 +236,15 @@ class Training:
     obst_array = np.array(obst_list, dtype = 'float32')
     y_array = np.array(y_list, dtype = 'float32')
 
-    self.max_Ux_list.append(np.max(x_array[...,0]))
-    self.min_Ux_list.append(np.min(x_array[...,0]))
-    self.max_Uy_list.append(np.max(x_array[...,1]))
-    self.min_Uy_list.append(np.min(x_array[...,1]))
-    self.max_dist_list.append(np.max(obst_array[...,0]))
-    self.min_dist_list.append(np.min(obst_array[...,0]))
+    self.max_abs_Ux_list.append(np.max(np.abs(x_array[...,0])))
+    self.max_abs_Uy_list.append(np.max(np.abs(x_array[...,1])))
+    self.max_abs_dist_list.append(np.max(np.abs(obst_array[...,0])))
 
     # Setting the average pressure in each block to 0
     for step in range(y_array.shape[0]):
       y_array[step,...][obst_array[step,...] != 0] -= np.mean(y_array[step,...][obst_array[step,...] != 0])
     
-    self.max_p_list.append(np.max(y_array[...,0]))
-    self.min_p_list.append(np.min(y_array[...,0]))
+    self.max_abs_p_list.append(np.max(np.abs(y_array[...,0])))
 
     array = np.c_[x_array,obst_array,y_array]
     
@@ -245,7 +253,7 @@ class Training:
     # Find unique rows
     unique_indices = np.unique(reshaped_array, axis=0, return_index=True)[1]
     unique_array = array[unique_indices]
-    
+
     print(f"Writting t{j} to {self.filename}", flush=True)
     file = tables.open_file(self.filename, mode='a')
     file.root.data.append(np.array(unique_array, dtype = 'float16'))
@@ -335,14 +343,10 @@ class Training:
     array_c = file.create_earray(file.root, 'data', atom, (0, self.block_size, self.block_size, NUM_COLUMNS))
     file.close()
 
-    self.max_Ux_list = []
-    self.min_Ux_list = []
-    self.max_Uy_list = []
-    self.min_Uy_list = []
-    self.max_dist_list = []
-    self.min_dist_list = []
-    self.max_p_list = []
-    self.min_p_list = []
+    self.max_abs_Ux_list = []
+    self.max_abs_Uy_list  = []
+    self.max_abs_dist_list  = []
+    self.max_abs_p_list  = []
 
     sim_cil = False
     sim_tria = False   
@@ -354,18 +358,13 @@ class Training:
       print(f"\nProcessing sim {i}/{np.sum(self.num_sims)}\n", flush=True)
       self.process_sim(i)
 
-    self.min_ux, self.max_ux = np.min(self.min_Ux_list), np.max(self.max_Ux_list)
-    self.min_uy, self.max_uy = np.min(self.min_Uy_list), np.max(self.max_Uy_list)
-    self.min_dist, self.max_dist = np.min(self.min_dist_list), np.max(self.max_dist_list)
-    self.min_p, self.max_p = np.min(self.min_p_list), np.max(self.max_p_list)
+    self.max_abs_Ux = np.max(np.abs(self.max_abs_Ux_list))
+    self.max_abs_Uy = np.max(np.abs(self.max_abs_Uy_list))
+    self.max_abs_dist = np.max(np.abs(self.max_abs_dist_list))
+    self.max_abs_p = np.max(np.abs(self.max_abs_p_list))
 
-    #self.max_abs_Ux = np.max(np.abs(self.max_abs_Ux_list))
-    #self.max_abs_Uy = np.max(np.abs(self.max_abs_Uy_list))
-    #self.max_abs_dist = np.max(np.abs(self.max_abs_dist_list))
-    #self.max_abs_p = np.max(np.abs(self.max_abs_p_list))
 
-    #np.savetxt('maxs', [self.max_abs_Ux, self.max_abs_Uy, self.max_abs_dist, self.max_abs_p] )
-    np.savetxt('maxs', [self.min_ux, self.max_ux, self.min_uy, self.max_uy, self.min_dist, self.max_dist, self.min_p, self.max_p] )
+    np.savetxt('maxs', [self.max_abs_Ux, self.max_abs_Uy, self.max_abs_dist, self.max_abs_p] )
 
     return 0
 
@@ -439,8 +438,8 @@ class Training:
     for index in range(len(input)):
 
       #get the data we want to write
-      current_input = input[index].astype('float64')
-      current_output = output[index].astype('float64')
+      current_input = input[index].astype('float32')
+      current_output = output[index].astype('float32')
 
       out = self.parse_single_image(input_parse=current_input, output_parse=current_output)
       writer.write(out.SerializeToString())
@@ -464,11 +463,11 @@ class Training:
     file.create_earray(file.root, 'data_flat', atom, (0, max_num_PC, 2))
     file.close()
 
-    client = dask.distributed.Client(processes=False)#, n_workers=16)
+    client = dask.distributed.Client(processes=False)
 
-    N = int(self.n_samples * (self.num_sims)) # +self.numSimsRect + self.numSimsTria + self.numSimsPlate))
+    N = int(self.n_samples * (self.num_sims))
 
-    chunk_size = int(N/2)
+    chunk_size = int(N/5)
     print('Passing the PCA ' + str(N//chunk_size) + ' times', flush = True)
 
     if (not os.path.isfile(filename_flat)) or (not os.path.isfile('ipca_input.pkl')):
@@ -478,7 +477,7 @@ class Training:
       for i in range(int(N//chunk_size)):
 
         f = tables.open_file(self.filename, mode='r')
-        x_array = f.root.data[i*chunk_size:(i+1)*chunk_size,:,:,0:2] # e.g. read from disk only this par$
+        x_array = f.root.data[i*chunk_size:(i+1)*chunk_size,:,:,0:2]
         obst_array = f.root.data[i*chunk_size:(i+1)*chunk_size,:,:,2:3]
         y_array = f.root.data[i*chunk_size:(i+1)*chunk_size,:,:,3:4]
         f.close()
@@ -490,23 +489,23 @@ class Training:
         x_array_flat = x_array.reshape((x_array.shape[0], x_array.shape[1]*x_array.shape[2], 2 ))
 
         # Normalize to [-1,1]
-        #x_array_flat1 = x_array_flat[...,0:1]/self.max_abs_Ux
-        #x_array_flat2 = x_array_flat[...,1:2]/self.max_abs_Uy
-        #obst_array_flat = obst_array.reshape((obst_array.shape[0], obst_array.shape[1]*obst_array.shape[2], 1 ))/self.max_abs_dist
-        #y_array_flat = y_array.reshape((y_array.shape[0], y_array.shape[1]*y_array.shape[2]))/self.max_abs_p
+        x_array_flat1 = x_array_flat[...,0:1]/self.max_abs_Ux
+        x_array_flat2 = x_array_flat[...,1:2]/self.max_abs_Uy
+        obst_array_flat = obst_array.reshape((obst_array.shape[0], obst_array.shape[1]*obst_array.shape[2], 1 ))/self.max_abs_dist
 
-        # Normalize to [0,1]
-        x_array_flat2 = (x_array_flat[...,0:1] - self.min_ux)/(self.max_ux - self.min_ux)
-        x_array_flat1 = (x_array_flat[...,1:2] - self.min_uy)/(self.max_uy - self.min_uy)
-        obst_array_flat = (obst_array.reshape((obst_array.shape[0], obst_array.shape[1]*obst_array.shape[2], 1 )) - self.min_dist)/(self.max_ux - self.min_dist)
-        y_array_flat = (y_array.reshape((y_array.shape[0], y_array.shape[1]*y_array.shape[2])) - self.min_p)/(self.max_p - self.min_p)
+        y_array_flat = y_array.reshape((y_array.shape[0], y_array.shape[1]*y_array.shape[2]))/self.max_abs_p
 
         input_flat = np.concatenate((x_array_flat1,x_array_flat2,obst_array_flat) , axis = -1)
         input_flat = input_flat.reshape((input_flat.shape[0],-1))
         y_flat = y_array_flat.reshape((y_array_flat.shape[0],-1)) 
 
-        input_dask = dask.array.from_array(input_flat, chunks='auto')
-        y_dask = dask.array.from_array(y_array_flat, chunks='auto')
+        # Scatter input and output data
+        input_dask_future = client.scatter(input_flat)
+        y_dask_future = client.scatter(y_array_flat)
+
+        # Convert futures to Dask arrays
+        input_dask = dask.array.from_delayed(input_dask_future, shape=input_flat.shape, dtype=input_flat.dtype)
+        y_dask = dask.array.from_delayed(y_dask_future, shape=y_array_flat.shape, dtype=y_array_flat.dtype)
 
         #scaler = dask_ml.preprocessing.StandardScaler().fit(input_dask)
         scaler = dask_ml.preprocessing.StandardScaler().fit(input_dask.rechunk({1: input_dask.shape[1]}))
@@ -547,28 +546,27 @@ class Training:
       y_array = f.root.data[i*chunk_size:(i+1)*chunk_size,:,:,3:4]
       f.close()
 
-      # Normalize to [-1,1]
-      # x_array_flat = x_array.reshape((x_array.shape[0], x_array.shape[1]*x_array.shape[2], 2 ))
-      # x_array_flat1 = x_array_flat[...,0:1]/self.max_abs_Ux
-      # x_array_flat2 = x_array_flat[...,1:2]/self.max_abs_Uy
-      # obst_array_flat = obst_array.reshape((obst_array.shape[0], obst_array.shape[1]*obst_array.shape[2], 1 ))/self.max_abs_dist
+      if x_array.shape[0] < max_num_PC:
+        print('This chunck is too small ... skipping')
+        break
 
-      # Normalize to [0,1]
-      
-      x_array_flat = x_array.reshape((x_array.shape[0], x_array.shape[1]*x_array.shape[2], 2 ))
-      x_array_flat1 = (x_array_flat[...,0:1] - self.min_ux)/(self.max_ux - self.min_ux)
-      x_array_flat2 = (x_array_flat[...,1:2] - self.min_uy)/(self.max_uy - self.min_uy)
-      obst_array_flat = (obst_array.reshape((obst_array.shape[0], obst_array.shape[1]*obst_array.shape[2], 1 )) - self.min_dist)/(self.max_ux - self.min_dist)
+      # Normalize to [-1,1]
+      x_array_flat1 = x_array_flat[...,0:1]/self.max_abs_Ux
+      x_array_flat2 = x_array_flat[...,1:2]/self.max_abs_Uy
+      obst_array_flat = obst_array.reshape((obst_array.shape[0], obst_array.shape[1]*obst_array.shape[2], 1 ))/self.max_abs_dist
 
       input_flat = np.concatenate((x_array_flat1,x_array_flat2,obst_array_flat) , axis = -1)
       input_flat = input_flat.reshape((input_flat.shape[0],-1))
 
-      #y_array_flat = y_array.reshape((y_array.shape[0], y_array.shape[1]*y_array.shape[2]))/self.max_abs_p
-      y_array_flat = (y_array.reshape((y_array.shape[0], y_array.shape[1]*y_array.shape[2])) - self.min_p)/(self.max_p - self.min_p)
+      y_array_flat = y_array.reshape((y_array.shape[0], y_array.shape[1]*y_array.shape[2]))/self.max_abs_p
 
-
-      input_dask = dask.array.from_array(input_flat, chunks='auto')
-      y_dask = dask.array.from_array(y_array_flat, chunks='auto')
+      # Scatter input and output data
+      input_dask_future = client.scatter(input_flat)
+      y_dask_future = client.scatter(y_array_flat)
+   
+      # Convert futures to Dask arrays
+      input_dask = dask.array.from_delayed(input_dask_future, shape=input_flat.shape, dtype=input_flat.dtype)
+      y_dask = dask.array.from_delayed(y_dask_future, shape=y_array_flat.shape, dtype=y_array_flat.dtype)
 
       scaler = dask_ml.preprocessing.StandardScaler().fit(input_dask.rechunk({1: input_dask.shape[1]}))
       scaler1 = dask_ml.preprocessing.StandardScaler().fit(y_dask.rechunk({1: y_dask.shape[1]}))
@@ -583,7 +581,7 @@ class Training:
       print(array_image.shape, flush = True)
 
       f = tables.open_file(filename_flat, mode='a')
-      f.root.data_flat.append(array_image)
+      f.root.data_flat.append(np.array(array_image))
       f.close()
       
       print('transformed ' + str(i+1) + '/' + str(N//chunk_size), flush = True)
@@ -603,10 +601,7 @@ class Training:
       self.read_dataset()
     else:
       maxs = np.loadtxt('maxs')
-      self.min_ux, self.max_ux = maxs[0], maxs[1]
-      self.min_uy, self.max_uy = maxs[2], maxs[3]
-      self.min_dist, self.max_dist = maxs[4], maxs[5]
-      self.min_p, self.max_p = maxs[6], maxs[7]
+      self.max_abs_Ux, self.max_abs_Uy, self.max_abs_dist, self.max_abs_p = maxs[0], maxs[1], maxs[2], maxs[3]
       
     if not (os.path.isfile(filename_flat) and os.path.isfile('ipca_input.pkl') and os.path.isfile('ipca_p.pkl')):
       print('Applying PCA \n')
@@ -762,6 +757,8 @@ class Training:
 
     optimizer = tf.keras.optimizers.Adam(learning_rate=lr, beta_1=beta_1, beta_2=0.999)#, epsilon=1e-08, decay=0.45*lr, amsgrad=True)
 
+    min_yet = 1e9
+
     for epoch in range(num_epoch):
       progbar = tf.keras.utils.Progbar(math.ceil(self.len_train/batch_size))
       print('Start of epoch %d' %(epoch,))
@@ -792,10 +789,11 @@ class Training:
         break
 
       if epoch > 50:
-        min_yet = losses_val_mean
-        print('saving model')
         mod = 'model_' + model_name + '.h5'
-        self.model.save(mod)
+        if losses_val_mean < min_yet:
+          print('saving model')
+          self.model.save(mod)
+          min_yet = losses_val_mean
     
     print("Terminating training")
     mod = 'model_' + model_name + '.h5'
@@ -822,7 +820,7 @@ def main_train(dataset_path, num_sims, num_ts, num_epoch, lr, beta, batch_size, 
     n_layers = 5
     width = [256] + [512]*3 + [256]
   elif model_size == 'big':
-    n_layers = 8
+    n_layers = 7
     width = [256] + [512]*5 + [256]
   elif model_size == 'huge':
     n_layers = 12
@@ -834,7 +832,7 @@ def main_train(dataset_path, num_sims, num_ts, num_epoch, lr, beta, batch_size, 
   num_ts = [num_ts]
   num_sims = [num_sims]
 
-  model_name = f'{model_size}-{model_size}-{standardization_method}-{var_p}-drop{dropout_rate}'
+  model_name = f'{model_size}-{model_size}-{standardization_method}-{var_p}-drop{dropout_rate}-lr{lr}'
 
   Train = Training(delta, block_size,var_p, var_in, paths, n_samples, num_sims, num_ts, standardization_method)
 

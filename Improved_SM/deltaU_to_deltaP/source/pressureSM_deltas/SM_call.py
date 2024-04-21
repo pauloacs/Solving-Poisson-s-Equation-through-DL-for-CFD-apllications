@@ -64,10 +64,8 @@ class Evaluation():
 		self.standardization_method = standardization_method
 
 		maxs = np.loadtxt('maxs')
-		#maxs_PCA = np.loadtxt('maxs_PCA')
 
 		self.max_abs_Ux, self.max_abs_Uy, self.max_abs_dist, self.max_abs_p = maxs[0], maxs[1], maxs[2], maxs[3]
-		#self.max_abs_input_PCA, self.max_abs_output_PCA = maxs_PCA[0], maxs_PCA[1]
 
 		#### loading the model #######
 		self.model = tf.keras.models.load_model(model_path)
@@ -83,7 +81,7 @@ class Evaluation():
 
 	def interp_weights(self, xyz, uvw):
 		"""
-		Gets the interpolation's vertices and weights from xyz to uvw.
+		Gets the interpolation's verticies and weights from xyz to uvw.
 
 		Args:
 			xyz (NDArray): Original array of coordinates.
@@ -256,12 +254,6 @@ class Evaluation():
 
 		self.indices = indices.astype(int)
 
-		self.pred_minus_true = []
-		self.pred_minus_true_squared = []
-
-		self.pred_minus_true_p = []
-		self.pred_minus_true_squared_p = []
-
 		return 0
 
 	def assemble_prediction(self, array, indices_list, n_x, n_y, apply_filter, shape_x, shape_y):
@@ -314,7 +306,7 @@ class Evaluation():
 
 				## Calculating correction to be applied
 				if i == 0: 
-					## First correction - based on the outlet fixed pressure boundary condition
+ 					## First correction - based on the outlet fixed pressure boundary condition
 					BC_coor = np.mean(pred_field[:,-1][flow_bool[:,-1]!=0]) - Ref_BC  # i = 0 sits outside the inclusion zone
 				else:
 					BC_ant_0 = np.mean(old_pred_field[:,:overlap][flow_bool[:,:overlap] !=0]) 
@@ -407,9 +399,9 @@ class Evaluation():
 			elif idx_i == (n_y + 1):
 				idx_j = n_x - idx_j
 				# option 1 - thick penultimate row
-				#result[-p_i:, shape_x -shape - idx_j*(shape-overlap) :  shape_x- idx_j*(shape-overlap)] = pred_field[-p_i:]
+				result[-p_i:, shape_x -shape - idx_j*(shape-overlap) :  shape_x- idx_j*(shape-overlap)] = pred_field[-p_i:]
 				# option 2 - thick last row
-				result[-shape:, shape_x -shape - idx_j*(shape-overlap) :  shape_x- idx_j*(shape-overlap)] = pred_field
+				#result[-shape:, shape_x -shape - idx_j*(shape-overlap) :  shape_x- idx_j*(shape-overlap)] = pred_field
 
 			else:
 				idx_j = n_x - idx_j
@@ -453,9 +445,20 @@ class Evaluation():
 		p = data[i,j,:self.indice,2:3] #values
 
 		U_max_norm = np.max(np.sqrt(np.square(Ux) + np.square(Uy)))
+		deltaU_max_norm = np.max(np.sqrt(np.square(delta_Ux) + np.square(delta_Uy)))
+
+		# Ignore time steps with minimal changes ...
+		# there is not point in computing error metrics for these
+		# it would exagerate the delta_p errors and give ~0% errors in p
+		threshold = 1e-4
+		irrelevant_ts = (deltaU_max_norm/U_max_norm) < threshold
+
+		if irrelevant_ts:
+			print(f"\n\n Irrelevant time step, U_norm changed {(deltaU_max_norm/U_max_norm)*100:.2f} [%] (criteria: < {threshold*100:.2f} [%]).\n Skipping Time step.")
+			return 0
 
 		delta_p_adim = delta_p / pow(U_max_norm,2.0) 
-		delta_Ux_adim = delta_Ux/U_max_norm 
+		delta_Ux_adim = delta_Ux/U_max_norm
 		delta_Uy_adim = delta_Uy/U_max_norm
 
 		delta_p_interp = self.interpolate_fill(delta_p_adim, self.vert, self.weights)
@@ -465,14 +468,15 @@ class Evaluation():
 
 		grid = np.zeros(shape=(1, self.grid_shape_y, self.grid_shape_x, 5))
 
-		grid[0,:,:,0:1][tuple(self.indices.T)] = delta_Ux_interp.reshape(delta_Ux_interp.shape[0],1)
-		grid[0,:,:,1:2][tuple(self.indices.T)] = delta_Uy_interp.reshape(delta_Uy_interp.shape[0],1)
+		grid[0,:,:,0:1][tuple(self.indices.T)] = delta_Ux_interp.reshape(delta_Ux_interp.shape[0], 1)
+		grid[0,:,:,1:2][tuple(self.indices.T)] = delta_Uy_interp.reshape(delta_Uy_interp.shape[0], 1)
 		grid[0,:,:,2:3] = self.sdfunct
-		grid[0,:,:,3:4][tuple(self.indices.T)] = delta_p_interp.reshape(delta_p_interp.shape[0],1)
-		grid[0,:,:,4:5][tuple(self.indices.T)] = p_interp.reshape(p_interp.shape[0],1)
+		grid[0,:,:,3:4][tuple(self.indices.T)] = delta_p_interp.reshape(delta_p_interp.shape[0], 1)
+		grid[0,:,:,4:5][tuple(self.indices.T)] = p_interp.reshape(p_interp.shape[0], 1)
 
 		grid[np.isnan(grid)] = 0 #set any nan value to 0
 
+		## Rescale all the variables to [-1,1]
 		grid[0,:,:,0:1] = grid[0,:,:,0:1]/self.max_abs_Ux
 		grid[0,:,:,1:2] = grid[0,:,:,1:2]/self.max_abs_Uy
 		grid[0,:,:,2:3] = grid[0,:,:,2:3]/self.max_abs_dist
@@ -509,6 +513,7 @@ class Evaluation():
 
 		self.x_array = np.concatenate(x_list)
 		self.y_array = np.concatenate(y_list)
+
 		y_array = self.y_array
 		N = self.x_array.shape[0]
 		features = self.x_array.shape[3]
@@ -523,11 +528,12 @@ class Evaluation():
 		print(' Total variance from input represented: ' + str(np.sum(self.pcainput.explained_variance_ratio_[:self.pc_in])))
 		print(input_transformed.shape)
 
+		# to with label data
 		y_array_flat = y_array.reshape((N, y_array.shape[1]*y_array.shape[2], 1))
 		y_array_flat = y_array_flat.reshape((y_array_flat.shape[0],-1))
 
 		y_transformed = self.pcap.transform(y_array_flat)[:,:self.pc_p]
-		print(' Total variance from Obst_bool represented: ' + str(np.sum(self.pcap.explained_variance_ratio_[:self.pc_p])))
+		print(' Total variance from pressure represented: ' + str(np.sum(self.pcap.explained_variance_ratio_[:self.pc_p])))
 
 		if self.standardization_method == 'std':
 			## Option 1: Standardization
@@ -561,47 +567,55 @@ class Evaluation():
 		elif self.standardization_method == 'min_max':
 			res_concat = res_concat * (max_out_loaded - min_out_loaded) + min_out_loaded
 		elif self.standardization_method == 'max_abs':
-			res_concat *= self.max_abs_output_PCA
+			res_concat *= self.max_abs_output_PCA 
 		else:
 			raise ValueError("Standardization method not valid")
 
-		res_flat_inv = np.dot(res_concat, comp[:self.pc_p, :]) + pca_mean
-		res_concat = res_flat_inv.reshape((res_concat.shape[0], shape, shape, 1))
+		res_flat_inv = np.dot(res_concat, comp[:self.pc_p, :]) + pca_mean	
+		res_concat = res_flat_inv.reshape((res_concat.shape[0], shape, shape, 1)) 
 
-		# Dimensionalize pressure field
-		res_concat = res_concat#  * pow(delta_U_max_norm,2.0) * self.max_abs_p
+		# to test with label data
+		y_flat_inv = np.dot(y_transformed, comp[:self.pc_p, :]) + pca_mean	
+		y_concat = y_flat_inv.reshape((res_concat.shape[0], shape, shape, 1)) 
+
+		## Dimensionalize pressure field - There is no need to dimensionalize the pressure field here
+		## As we can compare it to the reference non-dimensionalized field
+		## This only needs to be done when calling the SM in the CFD solver
+		res_concat = res_concat  * self.max_abs_p * pow(U_max_norm,2.0)
 
 		# the boundary condition is a fixed pressure of 0 at the output
 		self.Ref_BC = 0 
 
 
 		# performing the assembly process
-		res = self.assemble_prediction(res_concat[...,0], indices_list, n_x, n_y, apply_filter, grid.shape[2], grid.shape[1])
-		test_res = self.assemble_prediction(y_array[...,0], indices_list, n_x, n_y, apply_filter, grid.shape[2], grid.shape[1])
+		deltap_res = self.assemble_prediction(res_concat[...,0], indices_list, n_x, n_y, apply_filter, grid.shape[2], grid.shape[1])
+		deltap_test_res = self.assemble_prediction(y_array[...,0], indices_list, n_x, n_y, apply_filter, grid.shape[2], grid.shape[1])
 		
 		################## ----------------//---------------####################################
 
-		## use field=test_res to test the assembly algorith -> it should be almost perfect in that case
+		## use field_deltap = deltap_test_res to test the assembly algorith -> it should be almost perfect in that case
 
-		field = res
+		field_deltap = deltap_res
+		cfd_results = grid[0,:,:,3] * self.max_abs_p * pow(U_max_norm,2.0)
 
+		no_flow_bool = grid[0,:,:,2] == 0
 		# Plotting the integrated pressure field
 		fig, axs = plt.subplots(3,2, figsize=(65, 15))
 
-		vmax = np.max(grid[0,:,:,3])
-		vmin = np.min(grid[0,:,:,3])
+		vmax = np.max(cfd_results)
+		vmin = np.min(cfd_results)
 
-		masked_arr = np.ma.array(field, mask=(grid[0,:,:,2] == 0))
+		masked_arr = np.ma.array(field_deltap, mask=no_flow_bool)
 		axs[0,0].set_title('delta_p predicted', fontsize = 15)
 		cf = axs[0,0].imshow(masked_arr, interpolation='nearest', cmap='jet')#, vmax = vmax, vmin = vmin )
 		plt.colorbar(cf, ax=axs[0,0])
 
-		masked_arr = np.ma.array(grid[0,:,:,3], mask=(grid[0,:,:,2] == 0))
+		masked_arr = np.ma.array(cfd_results, mask=no_flow_bool)
 		axs[1,0].set_title('CFD results', fontsize = 15)
 		cf = axs[1,0].imshow(masked_arr, interpolation='nearest', cmap='jet')#, vmax = vmax, vmin = vmin)
 		plt.colorbar(cf, ax=axs[1,0])
 
-		masked_arr = np.ma.array( np.abs(( grid[0,:,:,3] - field )/(np.max(grid[0,:,:,3]) -np.min(grid[0,:,:,3]))*100) , mask=(grid[0,:,:,2] == 0))
+		masked_arr = np.ma.array( np.abs(( cfd_results - field_deltap )/(np.max(cfd_results) -np.min(cfd_results))*100) , mask=no_flow_bool)
 		axs[2,0].set_title('error in %', fontsize = 15)
 		cf = axs[2,0].imshow(masked_arr, interpolation='nearest', cmap='jet', vmax = 10, vmin=0 )
 		plt.colorbar(cf, ax=axs[2,0])
@@ -609,20 +623,23 @@ class Evaluation():
 		# actual pressure fields
 
 		# Infering p_t-1 from ref p and delta_p
-		p_prev = grid[0,:,:,4] - grid[0,:,:,3]
-		p_pred = p_prev + field
+		## grid[...,4] is p without being normalized to [0,1]
+		## grid[...,3] was normalized ...
 
-		masked_arr = np.ma.array(p_pred, mask=(grid[0,:,:,2] == 0))
+		p_prev = grid[0,:,:,4] - cfd_results
+		p_pred = p_prev + field_deltap
+
+		masked_arr = np.ma.array(p_pred, mask=no_flow_bool)
 		axs[0,1].set_title(r'Predicted pressure $p_{t-1} + delta_p$', fontsize = 15)
 		cf = axs[0,1].imshow(masked_arr, interpolation='nearest', cmap='jet')#, vmax = vmax, vmin = vmin )
 		plt.colorbar(cf, ax=axs[0,1])
 
-		masked_arr = np.ma.array(grid[0,:,:,4], mask=(grid[0,:,:,2] == 0))
+		masked_arr = np.ma.array(grid[0,:,:,4], mask=no_flow_bool)
 		axs[1,1].set_title('Pressure (CFD)', fontsize = 15)
 		cf = axs[1,1].imshow(masked_arr, interpolation='nearest', cmap='jet')#, vmax = vmax, vmin = vmin)
 		plt.colorbar(cf, ax=axs[1,1])
 
-		masked_arr = np.ma.array( np.abs(( grid[0,:,:,4] - p_pred )/(np.max(grid[0,:,:,4]) -np.min(grid[0,:,:,4]))*100) , mask=(grid[0,:,:,2] == 0))
+		masked_arr = np.ma.array( np.abs(( grid[0,:,:,4] - p_pred )/(np.max(grid[0,:,:,4]) -np.min(grid[0,:,:,4]))*100) , mask=no_flow_bool)
 
 		axs[2,1].set_title('error in %', fontsize = 15)
 		cf = axs[2,1].imshow(masked_arr, interpolation='nearest', cmap='jet', vmax = 2, vmin=0 )
@@ -639,55 +656,70 @@ class Evaluation():
 
 		############## ------------------//------------------##############################
 		
-		# This part is to output the error metrics
+		true_masked = cfd_results[~no_flow_bool]
+		pred_masked = field_deltap[~no_flow_bool]
 
-		true_mask = grid[0,:,:,3][grid[0,:,:,2] != 0]
-		pred_mask = field[grid[0,:,:,2] != 0]
-		norm = np.max(grid[0,:,:,3][grid[0,:,:,2] != 0]) - np.min(grid[0,:,:,3][grid[0,:,:,2] != 0])
+		# Calculate norm based on reference data a predicted data
+		norm_true = np.max(true_masked) - np.min(true_masked)
+		norm_pred = np.max(pred_masked) - np.min(pred_masked)
 
-		mask_nan = ~np.isnan( pred_mask  - true_mask )
-
-		BIAS_norm = np.mean( (pred_mask  - true_mask )[mask_nan] )/norm * 100
-		RMSE_norm = np.sqrt(np.mean( ( pred_mask  - true_mask )[mask_nan]**2 ))/norm * 100
-		STDE_norm = np.sqrt( (RMSE_norm**2 - BIAS_norm**2) )
-		
+		# Using the largest norm value to avoid problems with near-zero norms leading to relative errors tending to infinity
+		# This bounds the relative errors to [-100%, 100%]
+		norm = max(norm_true, norm_pred)
 
 		print(f"""
-		** Error in delta_p **
-
-		normVal  = {norm} Pa
-		biasNorm = {BIAS_norm:.2f}%
-		stdeNorm = {STDE_norm:.2f}%
-		rmseNorm = {RMSE_norm:.2f}%
+		norm_true = {norm_true};
+		norm_pred = {norm_pred};
 		""")
 
-		self.pred_minus_true.append( np.mean( (pred_mask  - true_mask )[mask_nan] )/norm )
-		self.pred_minus_true_squared.append( np.mean( (pred_mask  - true_mask )[mask_nan]**2 )/norm**2 )
+		mask_nan = ~np.isnan( pred_masked  - true_masked )
+
+		BIAS_norm = np.mean( (pred_masked  - true_masked )[mask_nan] )/norm * 100
+		RMSE_norm = np.sqrt(np.mean( ( pred_masked  - true_masked )[mask_nan]**2 ))/norm * 100
+		STDE_norm = np.sqrt( (RMSE_norm**2 - BIAS_norm**2) )
 		
-		## Error in the Pressure field
+		# If norm_true is very different from norm_pred, it is likely that there is some problem with the input data
+		# there are cases were the norm_pred is around 0.6 (typical value for all the sims) and norm_true is 20 (which makes no sense) 
+		# Ignoring those...
+		
+		if norm_true < (2 * norm_pred):
+			print(f"""
+			** Error in delta_p **
 
-		true_mask = grid[0,:,:,4][grid[0,:,:,2] != 0]
-		pred_mask = p_pred[grid[0,:,:,2] != 0]
-		norm = np.max(grid[0,:,:,4][grid[0,:,:,2] != 0]) - np.min(grid[0,:,:,4][grid[0,:,:,2] != 0])
+			normVal  = {norm} Pa
+			biasNorm = {BIAS_norm:.2f}%
+			stdeNorm = {STDE_norm:.2f}%
+			rmseNorm = {RMSE_norm:.2f}%
+			""", flush = True)
 
-		mask_nan = ~np.isnan( pred_mask  - true_mask )
+			self.pred_minus_true.append( np.mean( (pred_masked  - true_masked )[mask_nan] )/norm )
+			self.pred_minus_true_squared.append( np.mean( (pred_masked  - true_masked )[mask_nan]**2 )/norm**2 )
+		
+		## Error in p
 
-		BIAS_norm = np.mean( (pred_mask  - true_mask )[mask_nan] )/norm * 100
-		RMSE_norm = np.sqrt(np.mean( ( pred_mask  - true_mask )[mask_nan]**2 ))/norm * 100
+		true_masked = grid[0,:,:,4][~no_flow_bool]
+		pred_masked = p_pred[~no_flow_bool]
+		norm = np.max(pred_masked) - np.min(pred_masked)
+
+		mask_nan = ~np.isnan( pred_masked  - true_masked )
+
+		BIAS_norm = np.mean( (pred_masked  - true_masked )[mask_nan] )/norm * 100
+		RMSE_norm = np.sqrt(np.mean( ( pred_masked  - true_masked )[mask_nan]**2 ))/norm * 100
 		STDE_norm = np.sqrt( (RMSE_norm**2 - BIAS_norm**2) )
 
+		if norm_true < (2 * norm_pred):
+			print(f"""
+			** Error in p **
 
-		print(f"""
-		** Error in p **
+			normVal  = {norm} Pa
+			biasNorm = {BIAS_norm:.5f}%
+			stdeNorm = {STDE_norm:.5f}%
+			rmseNorm = {RMSE_norm:.5f}%
+			""", flush = True)
 
-		normVal  = {norm} Pa
-		biasNorm = {BIAS_norm:.2f}%
-		stdeNorm = {STDE_norm:.2f}%
-		rmseNorm = {RMSE_norm:.2f}%
-		""")
+			self.pred_minus_true_p.append( np.mean( (pred_masked  - true_masked )[mask_nan] )/norm )
+			self.pred_minus_true_squared_p.append( np.mean( (pred_masked  - true_masked )[mask_nan]**2 )/norm**2 )
 
-		self.pred_minus_true_p.append( np.mean( (pred_mask  - true_mask )[mask_nan] )/norm )
-		self.pred_minus_true_squared_p.append( np.mean( (pred_mask  - true_mask )[mask_nan]**2 )/norm**2 )
 
 		return 0
 
@@ -714,21 +746,25 @@ def call_SM_main(delta, model_name, shape, overlap_ratio, var_p, var_in, max_num
 					plot_intermediate_fields, standardization_method, save_plots, show_plots, apply_filter, create_GIF, \
 					n_sims, n_ts):
 
-	### This creates a directory to save the plots
-	path='plots/'
+	if save_plots:
+		### This creates a directory to save the plots
+		path='plots/'
 
-	try:
-		shutil.rmtree(path)
-	except OSError as e:
-		print ("")
+		try:
+			shutil.rmtree(path)
+		except OSError as e:
+			print ("")
 
-	os.makedirs(path)
+		os.makedirs(path)
 
 	overlap = int(overlap_ratio*shape)
 	
 	Eval = Evaluation(delta, shape, overlap, var_p, var_in, dataset_path, model_name, max_num_PC, standardization_method)
+
 	Eval.pred_minus_true = []
 	Eval.pred_minus_true_squared = []
+	Eval.pred_minus_true_p = []
+	Eval.pred_minus_true_squared_p = []
 
 	# Simulations to use for evaluation
 	# This points to the number of the simulation data in the dataset
@@ -740,28 +776,28 @@ def call_SM_main(delta, model_name, shape, overlap_ratio, var_p, var_in, max_num
 		for time in range(n_ts):
 			Eval.timeStep(sim, time, plot_intermediate_fields, save_plots, show_plots, apply_filter)
 
-		BIAS_value = np.mean(Eval.pred_minus_true) * 100
-		RMSE_value = np.sqrt(np.mean(Eval.pred_minus_true_squared)) * 100
-		STDE_value = np.sqrt( RMSE_value**2 - BIAS_value**2 )
+	BIAS_value = np.mean(Eval.pred_minus_true) * 100
+	RMSE_value = np.sqrt(np.mean(Eval.pred_minus_true_squared)) * 100
+	STDE_value = np.sqrt( RMSE_value**2 - BIAS_value**2 )
 
-		BIAS_value_p = np.mean(Eval.pred_minus_true_p) * 100
-		RMSE_value_p = np.sqrt(np.mean(Eval.pred_minus_true_squared_p)) * 100
-		STDE_value_p = np.sqrt( RMSE_value_p**2 - BIAS_value_p**2 )
+	BIAS_value_p = np.mean(Eval.pred_minus_true_p) * 100
+	RMSE_value_p = np.sqrt(np.mean(Eval.pred_minus_true_squared_p)) * 100
+	STDE_value_p = np.sqrt( RMSE_value_p**2 - BIAS_value_p**2 )
 
-		print(f'''
-		Average across the WHOLE simulation:
+	print(f'''
+	Average across the WHOLE set of simulations:
 
-		** Error in delta_p **
+	** Error in delta_p **
 
-		BIAS: {BIAS_value:.2f}%
-		STDE: {STDE_value:.2f}%
-		RMSE: {RMSE_value:.2f}%
+	BIAS: {BIAS_value:.2f}%
+	STDE: {STDE_value:.2f}%
+	RMSE: {RMSE_value:.2f}%
 
-		** Error in p **
-		BIAS: {BIAS_value_p:.2f}%
-		STDE: {STDE_value_p:.2f}%
-		RMSE: {RMSE_value_p:.2f}%
-		''')
+	** Error in p **
+	BIAS: {BIAS_value_p:.2f}%
+	STDE: {STDE_value_p:.2f}%
+	RMSE: {RMSE_value_p:.2f}%
+	''', flush = True)
 
 	if create_GIF:
 		self.createGIF(n_sims, n_ts)
