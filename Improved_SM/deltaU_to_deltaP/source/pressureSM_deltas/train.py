@@ -550,6 +550,8 @@ class Training:
         print('This chunck is too small ... skipping')
         break
 
+      x_array_flat = x_array.reshape((x_array.shape[0], x_array.shape[1]*x_array.shape[2], 2 ))
+
       # Normalize to [-1,1]
       x_array_flat1 = x_array_flat[...,0:1]/self.max_abs_Ux
       x_array_flat2 = x_array_flat[...,1:2]/self.max_abs_Uy
