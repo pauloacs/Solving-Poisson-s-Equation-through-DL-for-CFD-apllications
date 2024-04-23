@@ -28,7 +28,7 @@ import tensorflow as tf
 #tf.random.set_seed(0)
 tf.keras.utils.set_random_seed(0)
 
-from tensorflow.keras import Model
+from tensorflow.keras import Model, regularizers
 from tensorflow.keras.layers import ZeroPadding2D, concatenate, Conv2D, MaxPooling2D, Conv2DTranspose
 from tensorflow.keras.utils import plot_model
 from tensorflow.keras.callbacks import EarlyStopping
@@ -97,28 +97,132 @@ class Training:
     XX0, YY0 = np.meshgrid(X0,Y0)
     return XX0.flatten(), YY0.flatten()
 
+  
+  ################################################################################
+  ## Neural Networks architectures
+  ################################################################################
 
-  def densePCA(self, n_layers, depth=512, dropout_rate=None):
-    """
-    Creates the MLP NN.
-    """
+  def densePCA(self, n_layers, depth=512, dropout_rate=None, regularization=None):
+      """
+      Creates the MLP NN.
+      """
+      
+      inputs = Input(int(self.PC_input))
+      if len(depth) == 1:
+          depth = [depth]*n_layers
+      
+      # Regularization parameter
+      if regularization is not None:
+          regularizer = regularizers.l2(regularization)
+          print(f'\nUsing L2 regularization. Value: {regularization}\n')
+      else:
+          regularizer = None
+      
+      x = tf.keras.layers.Dense(depth[0], activation='relu', kernel_regularizer=regularizer)(inputs)
+      if dropout_rate is not None:
+          x = tf.keras.layers.Dropout(dropout_rate)(x)
+      
+      for i in range(n_layers - 1):
+          x = tf.keras.layers.Dense(depth[i+1], activation='relu', kernel_regularizer=regularizer)(x)
+          if dropout_rate is not None:
+              x = tf.keras.layers.Dropout(dropout_rate)(x)
+      
+      outputs = tf.keras.layers.Dense(self.PC_p)(x)
 
-    inputs = Input(self.PC_input)
+      model = Model(inputs, outputs, name="MLP")
+      print(model.summary())
+
+      return model
+ 
+  ## TO FIX LATER !!
+  def densePCA_attention(self, n_layers=3, depth=[512], dropout_rate=None, regularization=None):
+    """
+    Creates the MLP with an attention mechanism.
+    """
+    inputs = Input((int(self.PC_input),))
     if len(depth) == 1:
-      depth = [depth]*n_layers
-    x = tf.keras.layers.Dense(depth[0], activation='relu')(inputs)
-    if None is not dropout_rate: x = tf.keras.layers.Dropout(dropout_rate)(x)
-    for i in range(n_layers - 1):
-      x = tf.keras.layers.Dense(depth[i+1], activation='relu')(x)
-      if None is not dropout_rate: x = tf.keras.layers.Dropout(dropout_rate)(x)
-    outputs = tf.keras.layers.Dense(self.PC_p)(x)
+        depth = [depth[0]] * n_layers
+    
+    # Regularization parameter
+    regularizer = regularizers.l2(regularization) if regularization else None
+    
+    x = tf.keras.layers.Dense(depth[0], activation='relu', kernel_regularizer=regularizer)(inputs)
+    if dropout_rate is not None:
+        x = tf.keras.layers.Dropout(dropout_rate)(x)
+    
+    # Applying a multi-head attention layer
+    attn_output = tf.keras.layers.MultiHeadAttention(num_heads=4, key_dim=32)(x, x)
+    attn_output = tf.keras.layers.LayerNormalization()(attn_output)
+    
+    # Adding additional dense layers
+    for i in range(1, n_layers):
+        x = tf.keras.layers.Dense(depth[i], activation='relu', kernel_regularizer=regularizer)(attn_output)
+        if dropout_rate is not None:
+            x = tf.keras.layers.Dropout(dropout_rate)(x)
+        attn_output = LayerNormalization()(x + attn_output)  # Residual connection
+    
+    outputs = tf.keras.layers.Dense(self.PC_p)(attn_output)
 
-    model = Model(inputs, outputs, name="MLP")
+    model = Model(inputs, outputs, name="MLP_with_Attention")
     print(model.summary())
 
     return model
 
+  def conv1D_PCA(self, n_layers=3, depth=[512], dropout_rate=None, regularization=None, kernel_size=3):
+      """
+      Creates a 1D ConvNet with regularization and dropout, similar to an MLP.
+      """
+      
+      # Define input layer
+      inputs = Input(shape=(self.PC_input, 1))  # 1D Conv input shape requires an extra dimension
+      
+      if len(depth) == 1:
+          depth = [depth[0]] * n_layers
+      
+      # Regularization parameter
+      regularizer = regularizers.l2(regularization) if regularization else None
+      
+      # First convolutional layer
+      x = tf.keras.layers.Conv1D(
+          filters=depth[0], 
+          kernel_size=kernel_size, 
+          activation='relu',
+          padding='same',
+          kernel_regularizer=regularizer
+      )(inputs)
 
+      # Optional dropout
+      if dropout_rate:
+          x = tf.keras.layers.Dropout(dropout_rate)(x)
+      
+      # Additional convolutional layers
+      for i in range(1, n_layers):
+          x = tf.keras.layers.Conv1D(
+              filters=depth[i], 
+              kernel_size=kernel_size,
+              padding='same',
+              activation='relu', 
+              kernel_regularizer=regularizer
+          )(x)
+          
+          if dropout_rate:
+              x = tf.keras.layers.Dropout(dropout_rate)(x)
+      
+      # Flatten and final dense layer
+      x = tf.keras.layers.Flatten()(x)  # Convert 1D convolution output to a 1D vector
+      outputs = tf.keras.layers.Dense(self.PC_p)(x)
+
+      # Create and compile the model
+      model = Model(inputs, outputs, name="1D_ConvNet")
+
+      print(model.summary())
+
+      return model
+
+  #########################################################################
+  ## 3 options currently available to work with PC data
+  #########################################################################
+  
   def domain_dist(self, i,top_boundary, obst_boundary, xy0):
 
     # boundaries indice
@@ -468,7 +572,7 @@ class Training:
     N = int(self.n_samples * (self.num_sims))
 
     chunk_size = int(N/5)
-    print('Passing the PCA ' + str(N//chunk_size) + ' times', flush = True)
+    print('Applying incremental PCA ' + str(N//chunk_size) + ' times', flush = True)
 
     if (not os.path.isfile(filename_flat)) or (not os.path.isfile('ipca_input.pkl')):
       self.ipca_p = dask_ml.decomposition.IncrementalPCA(max_num_PC)
@@ -522,7 +626,7 @@ class Training:
         print('Fitted ' + str(i+1) + '/' + str(N//chunk_size), flush = True)
 
     else:
-      print('Loading PCA, as is already available', flush=True)
+      print('Loading PCA arrays, as those are already available', flush=True)
       self.ipca_p = pk.load(open("ipca_p.pkl",'rb'))
       self.ipca_input = pk.load(open("ipca_input.pkl",'rb'))
 
@@ -739,7 +843,7 @@ class Training:
           return False
 
 
-  def load_data_And_train(self, lr, batch_size, max_num_PC, model_name, beta_1, num_epoch, n_layers, width, dropout_rate):
+  def load_data_And_train(self, lr, batch_size, max_num_PC, model_name, beta_1, num_epoch, n_layers, width, dropout_rate, regularization, convNN):
 
     train_path = 'train_data.tfrecords'
     test_path = 'test_data.tfrecords'
@@ -753,7 +857,11 @@ class Training:
     self.loss_object = self.my_mse_loss()
 
     #model = tf.keras.models.load_model('model_first_.h5') # to load model
-    self.model = self.densePCA(n_layers, width, dropout_rate)
+    if convNN:
+      self.model = self.conv1D_PCA(n_layers, width, dropout_rate, regularization)
+    else:
+      self.model = self.densePCA(n_layers, width, dropout_rate, regularization)
+    
 
     epochs_val_losses, epochs_train_losses = [], []
 
@@ -812,12 +920,21 @@ class Training:
         
     return 0
   
-def main_train(dataset_path, num_sims, num_ts, num_epoch, lr, beta, batch_size, standardization_method, \
-              n_samples, block_size, delta, max_num_PC, var_p, var_in, model_size, dropout_rate, outarray_fn, outarray_flat_fn):
+def main_train(dataset_path, num_sims, num_ts, num_epoch, lr, beta, batch_size, \
+              standardization_method, n_samples, block_size, delta, max_num_PC, \
+              var_p, var_in, model_size, dropout_rate, outarray_fn, outarray_flat_fn, regularization):
 
+  convNN = False
   if model_size == 'small':
     n_layers = 3
     width = [512]*3
+  elif model_size == 'small_unet':
+    n_layers = 9
+    width = [512, 256, 128, 64, 32, 64, 128, 256, 512]
+  elif model_size == 'conv1D':
+    n_layers = 7
+    width = [128, 64, 32, 16, 32, 64, 128]
+    convNN = True
   elif model_size == 'medium':
     n_layers = 5
     width = [256] + [512]*3 + [256]
@@ -834,13 +951,13 @@ def main_train(dataset_path, num_sims, num_ts, num_epoch, lr, beta, batch_size, 
   num_ts = [num_ts]
   num_sims = [num_sims]
 
-  model_name = f'{model_size}-{model_size}-{standardization_method}-{var_p}-drop{dropout_rate}-lr{lr}'
+  model_name = f'{model_size}-{standardization_method}-{var_p}-drop{dropout_rate}-lr{lr}-reg{regularization}'
 
   Train = Training(delta, block_size,var_p, var_in, paths, n_samples, num_sims, num_ts, standardization_method)
 
   # If you want to read the crude dataset (hdf5) again, delete the 'outarray.h5' file
   Train.prepare_data (paths, max_num_PC, outarray_fn, outarray_flat_fn) #prepare and save data to tf records
-  Train.load_data_And_train(lr, batch_size, max_num_PC, model_name, beta, num_epoch, n_layers, width, dropout_rate)
+  Train.load_data_And_train(lr, batch_size, max_num_PC, model_name, beta, num_epoch, n_layers, width, dropout_rate, regularization, convNN)
 
 if __name__ == '__main__':
 
@@ -869,10 +986,11 @@ if __name__ == '__main__':
   var_in = 0.95
 
   model_size = 'small'
-  dropout_rate = 0.2
+  dropout_rate = 0.1
+  regularization = 1e-4
 
   outarray_fn = '../blocks_dataset/outarray.h5'
   outarray_flat_fn = '../blocks_dataset/outarray_flat.h5'
 
   main_train(dataset_path, num_sims, num_ts, num_epoch, lr, beta, batch_size, standardization_method, \
-    n_samples, block_size, delta, max_num_PC, var_p, var_in, model_size, dropout_rate, outarray_fn, outarray_flat_fn)
+    n_samples, block_size, delta, max_num_PC, var_p, var_in, model_size, dropout_rate, outarray_fn, outarray_flat_fn, regularization)
