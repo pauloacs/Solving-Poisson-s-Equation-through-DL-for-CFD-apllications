@@ -17,6 +17,13 @@ Although this repository focus on the surrogate models developed, the [DLpisoFoa
 
 To use the code in this repository, follow the instructions in each folder's respective README file.
 
+# Articles
+
+1 - Application of machine learning to model the pressure poisson equation for fluid flow on generic geometries:
+https://link.springer.com/article/10.1007/s00521-024-09935-0
+  - This paper contains a deep description of the ML Surrogate Model developed to solve the Pressure Poisson Equation.
+
+2- 
 
 ## License
 
