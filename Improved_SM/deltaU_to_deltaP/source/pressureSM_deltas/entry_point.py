@@ -24,8 +24,8 @@ def train_entry_point():
                         help='Var p value')
     parser.add_argument('--var_in', type=float, required=True,
                         help='Var in value')
-    parser.add_argument('--model_size', type=str, required=True,
-                        help='Model size')
+    parser.add_argument('--model_architecture', type=str, required=True,
+                        help='Model architecture')
 
     # Optional arguments
     parser.add_argument('--dropout_rate', type=float, default=None,

@@ -68,7 +68,11 @@ class Evaluation():
 		self.max_abs_Ux, self.max_abs_Uy, self.max_abs_dist, self.max_abs_p = maxs[0], maxs[1], maxs[2], maxs[3]
 
 		#### loading the model #######
-		self.model = tf.keras.models.load_model(model_path)
+		if 'MLP_attention_biased' in model_path:
+			from pressureSM_deltas.train import BiasedAttention
+			self.model = tf.keras.models.load_model(model_path, custom_objects={'BiasedAttention': BiasedAttention})
+		else:
+			self.model = tf.keras.models.load_model(model_path)
 		print(self.model.summary())
 		
 		### loading the pca matrices for transformations ###
@@ -79,22 +83,40 @@ class Evaluation():
 		self.pc_in = np.argmax(self.pcainput.explained_variance_ratio_.cumsum() > self.var_in) if np.argmax(self.pcainput.explained_variance_ratio_.cumsum() > self.var_in) > 1 and np.argmax(self.pcainput.explained_variance_ratio_.cumsum() > self.var_in) <= max_num_PC else max_num_PC
 
 
-	def interp_weights(self, xyz, uvw):
+	def interp_weights(self, xyz, uvw, d=2):
 		"""
-		Gets the interpolation's verticies and weights from xyz to uvw.
+		Get interpolation weights and vertices using barycentric interpolation.
+
+		This function calculates the interpolation weights and vertices for interpolating values from the original grid to the target grid.
+		The interpolation is performed using Delaunay triangulation.
 
 		Args:
-			xyz (NDArray): Original array of coordinates.
-			uvw (NDArray): Target array of coordinates
+			xyz (ndarray): Coordinates of the original grid.
+			uvw (ndarray): Coordinates of the target grid.
+			d (int, optional): Number of dimensions. Default is 2.
+
+		Returns:
+			ndarray: Vertices of the simplices that contain the target grid points.
+			ndarray: Interpolation weights for each target grid point.
 		"""
-		d = 2 #2d interpolation
 		tri = qhull.Delaunay(xyz)
 		simplex = tri.find_simplex(uvw)
 		vertices = np.take(tri.simplices, simplex, axis=0)
 		temp = np.take(tri.transform, simplex, axis=0)
 		delta = uvw - temp[:, d]
 		bary = np.einsum('njk,nk->nj', temp[:, :d, :], delta)
-		return vertices, np.hstack((bary, 1 - bary.sum(axis=1, keepdims=True)))
+		wts = np.hstack((bary, 1 - bary.sum(axis=1, keepdims=True)))
+		valid = ~(simplex == -1)
+
+		# Fill out-of-bounds points with Inverse-Distance Weighting
+		if (~valid).any():
+			tree = sklearn.neighbors.KDTree(xyz, leaf_size=40)
+			nndist, nni = tree.query(np.array(uvw)[~valid], k=3)
+			invalid = np.flatnonzero(~valid)
+			vertices[invalid] = list(nni)
+			wts[invalid] = list((1./np.maximum(nndist**2, 1e-6)) / (1./np.maximum(nndist**2, 1e-6)).sum(axis=-1)[:,None])
+			
+		return vertices, wts
 
 	#@njit
 	def interpolate_fill(self, values, vtx, wts, fill_value=np.nan):
@@ -194,7 +216,7 @@ class Evaluation():
 		# boundaries indice
 		indice_top = self.index(top_boundary[0,0,:,0] , -100.0 )[0]
 		top = top_boundary[0,0,:indice_top,:]
-		self.max_x, self.max_y = np.max([(top[:,0]).max(), x_max]), np.min([(top[:,1]).max(), x_max])
+		self.max_x, self.max_y = np.max([(top[:,0]).max(), x_max]), np.min([(top[:,1]).max(), y_max])
 		self.min_x, self.min_y = np.max([(top[:,0]).min(), x_min]), np.min([(top[:,1]).min(), y_min])
 
 		is_inside_domain = ( xy0[:,0] <= self.max_x)  * ( xy0[:,0] >= self.min_x ) * ( xy0[:,1] <= self.max_y ) * ( xy0[:,1] >= self.min_y ) #rhis is just for simplification
@@ -341,6 +363,14 @@ class Evaluation():
 				else:
 					BC_coor = np.mean(pred_field[:overlap,:][flow_bool[:overlap,:]!=0]) - BC_ups[idx_j]
 				
+					# if idx_j != 0 and idx_j != n_x:
+					# 	BC_ant_0 = np.mean(old_pred_field[:,:overlap][flow_bool[:,:overlap] !=0]) 
+					# 	BC_coor_2 = np.mean(pred_field[:,-overlap:][flow_bool[:,-overlap:]!=0]) - BC_ant_0
+					
+					# 	## Apply the lowest correction ... less prone to problems...
+					# 	if abs(BC_coor_2) *5 < abs(BC_coor):
+					# 		BC_coor = BC_coor_2
+
 				## Applying correction
 				pred_field -= BC_coor
 
@@ -383,7 +413,16 @@ class Evaluation():
 							BC_coor = np.mean(pred_field[:,-overlap:][flow_bool[:,-overlap:]!=0]) - BC_ant_0								
 					else:
 						BC_coor = np.mean(pred_field[:-p_i,:][flow_bool[:-p_i,:]!=0]) - BC_ups[idx_j]
-				
+
+						# if idx_j != 0:
+						# 	BC_ant_0 = np.mean(old_pred_field[:,:overlap][flow_bool[:,:overlap] !=0]) 
+						# 	BC_coor_2 = np.mean(pred_field[:,-overlap:][flow_bool[:,-overlap:]!=0]) - BC_ant_0
+						
+						# 	## Apply the lowest correction ... less prone to problems...
+						# 	if abs(BC_coor_2) *5 < abs(BC_coor):
+						# 		BC_coor = BC_coor_2
+								
+
 				## Applying the correction
 				pred_field -= BC_coor
 				
@@ -432,11 +471,10 @@ class Evaluation():
 		Returns:
 			None
 		"""
-	
+
 		data, top_boundary, obst_boundary = self.read_dataset(self.dataset_path, sim , time)
 		i = 0
 		j = 0
-		
 		Ux =  data[i,j,:self.indice,0:1] #values
 		Uy =  data[i,j,:self.indice,1:2] #values
 		delta_p = data[i,j,:self.indice,7:8] #values
@@ -583,13 +621,20 @@ class Evaluation():
 		## This only needs to be done when calling the SM in the CFD solver
 		res_concat = res_concat  * self.max_abs_p * pow(U_max_norm,2.0)
 
+		# Ignore blocks with near zero delta_U
+		# Assign deltap = 0
+		for i, x in enumerate(x_list):
+			if (x[0,:,:,0] < 1e-5).all() and (x[0,:,:,1] < 1e-5).all():
+				res_concat[i] = np.zeros((shape, shape, 1))
+
 		# the boundary condition is a fixed pressure of 0 at the output
 		self.Ref_BC = 0 
 
-
 		# performing the assembly process
 		deltap_res = self.assemble_prediction(res_concat[...,0], indices_list, n_x, n_y, apply_filter, grid.shape[2], grid.shape[1])
-		deltap_test_res = self.assemble_prediction(y_array[...,0], indices_list, n_x, n_y, apply_filter, grid.shape[2], grid.shape[1])
+		
+		# The next line can be used to evaluate the assembly algorithm
+		#deltap_test_res = self.assemble_prediction(y_array[...,0], indices_list, n_x, n_y, apply_filter, grid.shape[2], grid.shape[1])
 		
 		################## ----------------//---------------####################################
 
@@ -597,8 +642,8 @@ class Evaluation():
 
 		field_deltap = deltap_res
 		cfd_results = grid[0,:,:,3] * self.max_abs_p * pow(U_max_norm,2.0)
-
 		no_flow_bool = grid[0,:,:,2] == 0
+
 		# Plotting the integrated pressure field
 		fig, axs = plt.subplots(3,2, figsize=(65, 15))
 
@@ -654,6 +699,22 @@ class Evaluation():
 
 		plt.close()
 
+		# # Plotting the input fields - for debugging purposes
+		# fig, axs = plt.subplots(3,1, figsize=(65, 15))
+
+		# masked_arr = np.ma.array(grid[0,:,:,0], mask=no_flow_bool)
+		# cf = axs[0].imshow(masked_arr, interpolation='nearest', cmap='jet')#, vmax = vmax, vmin = vmin )
+		# plt.colorbar(cf, ax=axs[0])
+
+		# masked_arr = np.ma.array(grid[0,:,:,1], mask=no_flow_bool)
+		# cf = axs[1].imshow(masked_arr, interpolation='nearest', cmap='jet')#, vmax = vmax, vmin = vmin)
+		# plt.colorbar(cf, ax=axs[1])
+
+		# masked_arr = np.ma.array( grid[0,:,:,2] , mask=no_flow_bool)
+		# cf = axs[2].imshow(masked_arr, interpolation='nearest', cmap='jet', vmax = 10, vmin=0 )
+		# plt.colorbar(cf, ax=axs[2])
+		# plt.savefig(f'plots/inputs{sim}t{time}.png')
+		
 		############## ------------------//------------------##############################
 		
 		true_masked = cfd_results[~no_flow_bool]
