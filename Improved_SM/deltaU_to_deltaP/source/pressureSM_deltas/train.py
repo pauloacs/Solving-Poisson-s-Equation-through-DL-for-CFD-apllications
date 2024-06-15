@@ -47,33 +47,7 @@ from sklearn.decomposition import PCA, IncrementalPCA
 import tables
 import pickle as pk
 
-# Custom attention layer with bias towards early components
-class BiasedAttention(tf.keras.layers.Layer):
-  def __init__(self, num_components, weights=None, **kwargs):
-    super().__init__(**kwargs)
-    self.num_components = num_components
-    # Initialize attention weights with a bias towards early components
-    self.attention_weights = self.add_weight(
-      shape=(num_components,),
-      initializer=tf.keras.initializers.Constant(weights),
-      trainable=True,
-    )
-  
-  def call(self, inputs):
-    # Apply softmax to get attention distribution
-    attention_distribution = tf.nn.softmax(self.attention_weights, axis=0)
-    # Apply attention to inputs
-    attended_inputs = inputs * tf.expand_dims(attention_distribution, axis=0)  # Broadcasting to match dimensions
-    return tf.reduce_sum(attended_inputs, axis=1), attention_distribution
-  
-  def get_config(self):
-    config = super().get_config()
-    config.update({
-      "num_components": self.num_components,
-      "weights": self.attention_weights.numpy().tolist(),
-    })
-    return config
-        
+
 class Training:
 
   def __init__(self, delta, block_size, var_p, var_in, hdf5_paths, n_samples, num_sims, num_ts, standardization_method):
@@ -159,43 +133,7 @@ class Training:
       print(model.summary())
 
       return model
-  
-
-  # Updated densePCA_attention with the custom attention mechanism
-  # 
-  # Before using it I need TODO: Consider applying weights to the loss function - weighting the first PCs more heavily
-  # to match what the biased attention layer is doing here...
-  def densePCA_attention_biased(self, n_layers=3, depth=[512], dropout_rate=None, regularization=None):
-      """
-      Creates the MLP with an attention mechanism and bias towards earlier PCs.
-      """
-      # Assuming self.PC_input represents the number of principal components
-      inputs = Input((int(self.PC_input),))
-
-      # Regularization parameter
-      regularizer = regularizers.l2(regularization) if regularization else None
-      
-      # Applying the custom attention mechanism
-      attended_inputs, attention_distribution = BiasedAttention(self.PC_input, weights=self.ipca_input.explained_variance_ratio_[:self.PC_input])(inputs)
-      
-      # Applying a dense layer after the custom attention
-      x = tf.keras.layers.Dense(depth[0], activation='relu', kernel_regularizer=regularizer)(tf.expand_dims(attended_inputs, axis=1))
-      if dropout_rate is not None:
-          x = tf.keras.layers.Dropout(dropout_rate)(x)
-      
-      # Adding additional dense layers with optional dropout and normalization
-      for i in range(1, n_layers):
-          x = tf.keras.layers.Dense(depth[i], activation='relu', kernel_regularizer=regularizer)(x)
-          if dropout_rate is not None:
-              x = tf.keras.layers.Dropout(dropout_rate)(x)
-      
-      outputs = tf.keras.layers.Dense(self.PC_p)(x)  # Output layer
-
-      model = Model(inputs, outputs, name="MLP_with_BiasedAttention")
-      model.summary()
-
-      return model
-      
+ 
   def densePCA_attention(self, n_layers=3, depth=[512], dropout_rate=None, regularization=None):
     """
     Creates the MLP with an attention mechanism.
@@ -283,7 +221,7 @@ class Training:
       return model
 
   #########################################################################
-  ## 4 options currently available to work with PC data
+  ## 3 options currently available to work with PC data
   #########################################################################
   
   def domain_dist(self, i,top_boundary, obst_boundary, xy0):
@@ -383,7 +321,7 @@ class Training:
 
     new_XY_indices = [tuple(row) for row in XY_indices]
     XY_indices = np.unique(new_XY_indices, axis=0)
-
+    count=0
     for [jj, ii] in XY_indices:
 
             i_range = [int(ii - self.block_size/2), int( ii + self.block_size/2) ]
@@ -394,10 +332,14 @@ class Training:
             y = grid[0, i_range[0]:i_range[1] , j_range[0]:j_range[1] , 3:4 ]
 
             # Remove all the blocks with delta_U = 0 and delta_p = 0
-            if not ((x_u == 0).all() and (y==0).all()):
+            if not ((x_u < 1e-5).all() and (y < 1e-5).all()):
               x_list.append(x_u)
               obst_list.append(x_obst)
               y_list.append(y)
+            else:
+              count += 1
+
+    print(f'{count} blocks discarded')
 
     x_array = np.array(x_list, dtype = 'float32')
     obst_array = np.array(obst_list, dtype = 'float32')
@@ -563,11 +505,7 @@ class Training:
   def my_mse_loss(self):
     def loss_f(y_true, y_pred):
 
-      if self.model_architecture == "MLP_attention_biased":
-        loss = tf.reduce_mean(self.ipca_p.explained_variance_ratio_[:self.PC_p] * tf.square(y_true - y_pred) )
-        #loss = tf.reduce_mean(np.square(self.ipca_p.explained_variance_ratio_[:self.PC_p]) * tf.square(y_true - y_pred) )
-      else:
-        loss = tf.reduce_mean(tf.square(y_true - y_pred) )
+      loss = tf.reduce_mean(tf.square(y_true - y_pred) )
 
       return 1e6 * loss
     return loss_f
@@ -638,7 +576,7 @@ class Training:
 
     N = int(self.n_samples * (self.num_sims))
 
-    chunk_size = int(N/5)
+    chunk_size = int(N/20)
     print('Applying incremental PCA ' + str(N//chunk_size) + ' times', flush = True)
 
     if (not os.path.isfile(filename_flat)) or (not os.path.isfile('ipca_input.pkl')):
@@ -910,7 +848,7 @@ class Training:
           return False
 
 
-  def load_data_And_train(self, lr, batch_size, max_num_PC, model_name, beta_1, num_epoch, n_layers, width, dropout_rate, regularization, model_architecture):
+  def load_data_And_train(self, lr, batch_size, max_num_PC, model_name, beta_1, num_epoch, n_layers, width, dropout_rate, regularization, model_architecture, new_model):
 
     train_path = 'train_data.tfrecords'
     test_path = 'test_data.tfrecords'
@@ -923,19 +861,19 @@ class Training:
     self.optimizer = tf.keras.optimizers.Adam(learning_rate=lr, beta_1=beta_1, beta_2=0.999, epsilon=1e-08)#, decay=0.45*lr, amsgrad=True)
     self.loss_object = self.my_mse_loss()
 
-    self.model_architecture = model_architecture
 
-    #model = tf.keras.models.load_model('model_first_.h5') # to load model
-    if (model_architecture=='MLP_small') or (model_architecture=='MLP_big') or (model_architecture=='MLP_small_unet'):
-      self.model = self.densePCA(n_layers, width, dropout_rate, regularization)
-    elif model_architecture == 'conv1D':
-      self.model = self.conv1D_PCA(n_layers, width, dropout_rate, regularization)
-    elif model_architecture == 'MLP_attention':
-      self.model = self.densePCA_attention(n_layers, width, dropout_rate, regularization)
-    elif model_architecture == 'MLP_attention_biased':
-      self.model = self.densePCA_attention_biased(n_layers, width, dropout_rate, regularization)
+    if new_model:
+      if (model_architecture=='MLP_small') or (model_architecture=='MLP_big') or (model_architecture=='MLP_small_unet') or (model_architecture=='MLP_huge') or (model_architecture=='MLP_huger'):
+        self.model = self.densePCA(n_layers, width, dropout_rate, regularization)
+      elif model_architecture == 'conv1D':
+        self.model = self.conv1D_PCA(n_layers, width, dropout_rate, regularization)
+      elif model_architecture == 'MLP_attention':
+        self.model = self.densePCA_attention(n_layers, width, dropout_rate, regularization)
+      else:
+        raise ValueError('Invalid NN model type')
     else:
-      raise ValueError('Invalid NN model type')
+      print(f"Loading model:{'model_' + model_name + '.h5'}")
+      self.model = tf.keras.models.load_model('model_' + model_name + '.h5')
 
     epochs_val_losses, epochs_train_losses = [], []
 
@@ -996,20 +934,31 @@ class Training:
   
 def main_train(dataset_path, num_sims, num_ts, num_epoch, lr, beta, batch_size, \
               standardization_method, n_samples, block_size, delta, max_num_PC, \
-              var_p, var_in, model_architecture, dropout_rate, outarray_fn, outarray_flat_fn, regularization):
+              var_p, var_in, model_architecture, dropout_rate, outarray_fn, outarray_flat_fn, regularization, new_model):
 
-  if model_architecture == 'MLP_small' or model_architecture == 'MLP_attention' or model_architecture == 'MLP_attention_biased':
+  new_model = new_model.lower() == 'true'
+
+  if model_architecture == 'MLP_small':
     n_layers = 3
     width = [512]*3
   elif model_architecture == 'MLP_big':
     n_layers = 7
     width = [256] + [512]*5 + [256]
+  elif model_architecture == 'MLP_huge':
+    n_layers = 12
+    width = [256] + [512]*10 + [256]
+  elif model_architecture == 'MLP_huger':
+    n_layers = 20
+    width = [256] + [512]*18 + [256]
   elif model_architecture == 'MLP_small_unet':
     n_layers = 9
     width = [512, 256, 128, 64, 32, 64, 128, 256, 512]
   elif model_architecture == 'conv1D':
     n_layers = 7
     width = [128, 64, 32, 16, 32, 64, 128]
+  elif model_architecture == 'MLP_attention':
+    n_layers = 3
+    width = [512]*3
   else:
     raise ValueError('Invalid NN model type')
 
@@ -1017,13 +966,13 @@ def main_train(dataset_path, num_sims, num_ts, num_epoch, lr, beta, batch_size, 
   num_ts = [num_ts]
   num_sims = [num_sims]
 
-  model_name = f'{model_architecture}-{standardization_method}-{var_p}-drop{dropout_rate}-lr{lr}-reg{regularization}'
+  model_name = f'{model_architecture}-{standardization_method}-{var_p}-drop{dropout_rate}-lr{lr}-reg{regularization}-batch{batch_size}'
 
   Train = Training(delta, block_size,var_p, var_in, paths, n_samples, num_sims, num_ts, standardization_method)
 
   # If you want to read the crude dataset (hdf5) again, delete the 'outarray.h5' file
   Train.prepare_data (paths, max_num_PC, outarray_fn, outarray_flat_fn) #prepare and save data to tf records
-  Train.load_data_And_train(lr, batch_size, max_num_PC, model_name, beta, num_epoch, n_layers, width, dropout_rate, regularization, model_architecture)
+  Train.load_data_And_train(lr, batch_size, max_num_PC, model_name, beta, num_epoch, n_layers, width, dropout_rate, regularization, model_architecture, new_model)
 
 if __name__ == '__main__':
 
@@ -1058,5 +1007,7 @@ if __name__ == '__main__':
   outarray_fn = '../blocks_dataset/outarray.h5'
   outarray_flat_fn = '../blocks_dataset/outarray_flat.h5'
 
+  new_model = True
+
   main_train(dataset_path, num_sims, num_ts, num_epoch, lr, beta, batch_size, standardization_method, \
-    n_samples, block_size, delta, max_num_PC, var_p, var_in, model_architecture, dropout_rate, outarray_fn, outarray_flat_fn, regularization)
+    n_samples, block_size, delta, max_num_PC, var_p, var_in, model_architecture, dropout_rate, outarray_fn, outarray_flat_fn, regularization, new_model)

@@ -28,6 +28,8 @@ def train_entry_point():
                         help='Model architecture')
 
     # Optional arguments
+    parser.add_argument('--new_model', type=str, default='true',
+                        help='Whether to create a new model')
     parser.add_argument('--dropout_rate', type=float, default=None,
                         help="Dropout rate. If None the model won't have dropout layers")
     parser.add_argument('--regularization', type=float, default=None,
