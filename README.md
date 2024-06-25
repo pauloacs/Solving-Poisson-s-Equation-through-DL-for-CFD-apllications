@@ -23,7 +23,8 @@ To use the code in this repository, follow the instructions in each folder's res
 https://link.springer.com/article/10.1007/s00521-024-09935-0
   - This paper contains a deep description of the ML Surrogate Model developed to solve the Pressure Poisson Equation.
 
-2- Enhancing CFD solver with Machine Learning techniques: https://www.sciencedirect.com/science/article/pii/S004578252400389X
+2- Enhancing CFD solver with Machine Learning techniques: 
+https://www.sciencedirect.com/science/article/pii/S004578252400389X
   - This paper contains the CFD solver
 
 ## License
