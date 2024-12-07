@@ -1,14 +1,53 @@
+# Standard library imports
+import os
+import random
+import shutil
+import time
+import math
+import itertools
 from ctypes import py_object
-from re import X
-import matplotlib
-from numpy.core.defchararray import array
+import pickle as pk
 
+# Set environment variable for TensorFlow deterministic operations (for reproducibility)
+os.environ['TF_DETERMINISTIC_OPS'] = '1'
+
+# Third-party library imports
+import numpy as np
+import tables
+import h5py
+import matplotlib
+import matplotlib.pyplot as plt
+import scipy.spatial.qhull as qhull
+from scipy.spatial import cKDTree as KDTree, distance
+import matplotlib.path as mpltPath
+from shapely.geometry import MultiPoint
+from sklearn.decomposition import PCA, IncrementalPCA
+
+# Set seeds for reproducibility across libraries
+random.seed(0)
+np.random.seed(0)
+
+# TensorFlow imports
 import tensorflow as tf
+from tensorflow.keras import Model, regularizers
+from tensorflow.keras.layers import (
+    ZeroPadding2D, Conv2D, MaxPooling2D, Conv2DTranspose, 
+    BatchNormalization, Activation, MaxPool2D, concatenate, Input
+)
+from tensorflow.keras.utils import plot_model
+from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.optimizers import Adam
 from tensorflow.python.ops.gen_array_ops import inplace_update
-physical_devices = tf.config.list_physical_devices('GPU') 
+
+# Enable deterministic random behavior in TensorFlow
+tf.keras.utils.set_random_seed(0)
+
+# Enable GPU memory growth for reproducibility and efficient resource use
+physical_devices = tf.config.list_physical_devices('GPU')
 for device in physical_devices:
     tf.config.experimental.set_memory_growth(device, True)
 
+# Dask and related imports
 import dask
 import dask.config
 import dask.distributed
@@ -16,41 +55,13 @@ import dask_ml
 import dask_ml.preprocessing
 import dask_ml.decomposition
 
+# Additional scientific computing and data processing libraries
 from pyDOE import lhs
-from numba import njit
-import tensorflow as tf
-import os
-import shutil
-import time
-import h5py
-import numpy as np
-import tensorflow as tf
-#tf.random.set_seed(0)
-tf.keras.utils.set_random_seed(0)
-
-from tensorflow.keras import Model, regularizers
-from tensorflow.keras.layers import ZeroPadding2D, concatenate, Conv2D, MaxPooling2D, Conv2DTranspose
-from tensorflow.keras.utils import plot_model
-from tensorflow.keras.callbacks import EarlyStopping
-from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.layers import Conv2D, BatchNormalization, Activation, MaxPool2D, Conv2DTranspose, concatenate, Input
-import math
-import scipy.spatial.qhull as qhull
-import itertools
-from scipy.spatial import cKDTree as KDTree
-
-import matplotlib.pyplot as plt
-from scipy.spatial import distance
-import matplotlib.path as mpltPath
-from shapely.geometry import MultiPoint
-from sklearn.decomposition import PCA, IncrementalPCA
-import tables
-import pickle as pk
 
 
 class Training:
 
-  def __init__(self, delta, block_size, var_p, var_in, hdf5_paths, n_samples, num_sims, num_ts, standardization_method):
+  def __init__(self, delta, block_size, var_p, var_in, hdf5_paths, n_samples, num_sims, first_t, last_t, standardization_method, n_chunks):
     self.delta = delta
     self.block_size = block_size
     self.var_in = var_in
@@ -58,8 +69,10 @@ class Training:
     self.paths = hdf5_paths
     self.n_samples = n_samples
     self.num_sims = num_sims[0]
-    self.num_ts = num_ts
+    self.first_t = first_t
+    self.last_t = last_t
     self.standardization_method = standardization_method
+    self.n_chunks = n_chunks
 
   #@njit     ### with numba.njit is much faster but is returning an error when using it within the class ###
   def index(self, array, item):
@@ -254,8 +267,8 @@ class Training:
 
     domain_bool = is_inside_domain * ~is_inside_obst
 
-    top = top[0:top.shape[0]:5,:]   #if this has too many values, using cdist can crash the memmory since it needs to evaluate the distance between ~1M points with thousands of points of top
-    obst = obst[0:obst.shape[0]:5,:]
+    top = top[0:top.shape[0]:2,:]   #if this has too many values, using cdist can crash the memory since it needs to evaluate the distance between ~1M points with thousands of points of top
+    obst = obst[0:obst.shape[0]:2,:]
 
     #print(top.shape)
 
@@ -264,6 +277,38 @@ class Training:
     #print(np.max(sdf))
 
     return domain_bool, sdf
+
+  def sample_blocks(self, grid, x_list, obst_list, y_list, N):
+    """Sample N blocks from each time step based on LHS"""
+
+    lb = np.array([0 + self.block_size * self.delta/2 , 0 + self.block_size * self.delta/2 ])
+    ub = np.array([(self.x_max-self.x_min) - self.block_size * self.delta/2, (self.y_max-self.y_min) - self.block_size * self.delta/2])
+
+    XY = lb + (ub-lb)*lhs(2,N)
+    XY_indices = (np.round(XY/self.delta)).astype(int)
+
+    new_XY_indices = [tuple(row) for row in XY_indices]
+    XY_indices = np.unique(new_XY_indices, axis=0)
+    count=0
+    for [jj, ii] in XY_indices:
+
+            i_range = [int(ii - self.block_size/2), int( ii + self.block_size/2) ]
+            j_range = [int(jj - self.block_size/2), int( jj + self.block_size/2) ]
+
+            x_u = grid[0, i_range[0]:i_range[1] , j_range[0]:j_range[1] , 0:2 ]
+            x_obst = grid[0, i_range[0]:i_range[1] , j_range[0]:j_range[1] , 2:3 ]
+            y = grid[0, i_range[0]:i_range[1] , j_range[0]:j_range[1] , 3:4 ]
+
+            # Remove all the blocks with delta_U = 0 and delta_p = 0
+            if not ((x_u == 0).all() and (y == 0).all()):
+              x_list.append(x_u)
+              obst_list.append(x_obst)
+              y_list.append(y)
+            else:
+              count += 1
+
+    print(f'{count} blocks discarded')
+    return x_list, obst_list, y_list
 
   def process_time_step(self, j, data_limited, vert, weights, indices, sdfunct):
     """
@@ -284,10 +329,11 @@ class Training:
     threshold = 1e-4
     print(deltaU_max_norm)
     print(U_max_norm)
-    irrelevant_ts = (deltaU_max_norm/U_max_norm) < threshold
+    irrelevant_ts = (deltaU_max_norm/U_max_norm) < threshold or deltaU_max_norm < 1e-6 or U_max_norm < 1e-6
 
     if irrelevant_ts:
        print(f"\n\n Irrelevant time step, skipping it...")
+       self.stationary_ts += 1
        return 0
 
     delta_p_adim = delta_p/pow(U_max_norm,2.0) 
@@ -312,34 +358,27 @@ class Training:
     # Setting any nan value to 0
     grid[np.isnan(grid)] = 0
 
-    lb = np.array([0 + self.block_size * self.delta/2 , 0 + self.block_size * self.delta/2 ])
-    ub = np.array([(self.x_max-self.x_min) - self.block_size * self.delta/2, (self.y_max-self.y_min) - self.block_size * self.delta/2])
+    #How many rotations to do:
+    N_rotation = 1
+    N = int(self.n_samples/N_rotation/(self.last_t-self.first_t))
 
-    # Select N samples based on LHS
-    XY = lb + (ub-lb)*lhs(2,int(self.n_samples/self.num_ts))
-    XY_indices = (np.round(XY/self.delta)).astype(int)
+    x_list, obst_list, y_list = self.sample_blocks(grid, x_list, obst_list, y_list, N)
 
-    new_XY_indices = [tuple(row) for row in XY_indices]
-    XY_indices = np.unique(new_XY_indices, axis=0)
-    count=0
-    for [jj, ii] in XY_indices:
+    # Rotate and sample
+    #grid_y_inverted = grid[:, ::-1, :, :]
+    #x_list, obst_list, y_list = self.sample_blocks(grid_y_inverted, x_list, obst_list, y_list, N)
 
-            i_range = [int(ii - self.block_size/2), int( ii + self.block_size/2) ]
-            j_range = [int(jj - self.block_size/2), int( jj + self.block_size/2) ]
+    # Rotate and sample
+#    grid_y_inverted = grid[:, :, ::-1, :]
+#    x_list, obst_list, y_list = self.sample_blocks(grid_y_inverted, x_list, obst_list, y_list, N)
 
-            x_u = grid[0, i_range[0]:i_range[1] , j_range[0]:j_range[1] , 0:2 ]
-            x_obst = grid[0, i_range[0]:i_range[1] , j_range[0]:j_range[1] , 2:3 ]
-            y = grid[0, i_range[0]:i_range[1] , j_range[0]:j_range[1] , 3:4 ]
+    # Rotate and sample
+#    grid_y_inverted = grid[:, ::-1, ::-1, :]
+#    x_list, obst_list, y_list = self.sample_blocks(grid_y_inverted, x_list, obst_list, y_list, N)
 
-            # Remove all the blocks with delta_U = 0 and delta_p = 0
-            if not ((x_u < 1e-5).all() and (y < 1e-5).all()):
-              x_list.append(x_u)
-              obst_list.append(x_obst)
-              y_list.append(y)
-            else:
-              count += 1
-
-    print(f'{count} blocks discarded')
+    if len(x_list) == 0:
+       print('All blocks have been discarded, skipping time step')
+       return 0
 
     x_array = np.array(x_list, dtype = 'float32')
     obst_array = np.array(obst_list, dtype = 'float32')
@@ -363,7 +402,7 @@ class Training:
     unique_indices = np.unique(reshaped_array, axis=0, return_index=True)[1]
     unique_array = array[unique_indices]
 
-    print(f"Writting t{j} to {self.filename}", flush=True)
+    print(f"Writting t{j+self.first_t} to {self.filename}", flush=True)
     file = tables.open_file(self.filename, mode='a')
     file.root.data.append(np.array(unique_array, dtype = 'float16'))
     file.close()
@@ -373,9 +412,9 @@ class Training:
     """
 
     hdf5_file = h5py.File(self.dataset_path, "r")
-    data = np.array(hdf5_file["sim_data"][i:i+1, :self.num_ts, ...], dtype='float32')
-    top_boundary = hdf5_file["top_bound"][i:i+1, :self.num_ts, ...]
-    obst_boundary = hdf5_file["obst_bound"][i:i+1, :self.num_ts,  ...]
+    data = np.array(hdf5_file["sim_data"][i:i+1, self.first_t:(self.first_t + self.last_t), ...], dtype='float32')
+    top_boundary = hdf5_file["top_bound"][i:i+1, self.first_t:(self.first_t + self.last_t), ...]
+    obst_boundary = hdf5_file["obst_bound"][i:i+1, self.first_t:(self.first_t + self.last_t),  ...]
     hdf5_file.close()          
 
     indice = self.index(data[0,0,:,0] , -100.0 )[0]
@@ -434,9 +473,16 @@ class Training:
 
     indices = indices.astype(int)
 
+    # Number of subsquent t's with very small variations
+    self.stationary_ts = 0
     for j in range(data.shape[1]):  #100 for both data and data_rect
-      data_limited = data[0,j,:indice,:]#[mask_x]
+      # go from the last time to the first to access if the simulation is stationary
+      #j = (data.shape[1] -1) - j
+      data_limited = data[0,j,:indice,:]
       self.process_time_step(j, data_limited, vert, weights, indices, sdfunct)
+      if self.stationary_ts > 5: 
+        print('This simulation is stationary, ignoring it...')
+        break
 
   def read_dataset(self):
     """
@@ -456,12 +502,6 @@ class Training:
     self.max_abs_Uy_list  = []
     self.max_abs_dist_list  = []
     self.max_abs_p_list  = []
-
-    sim_cil = False
-    sim_tria = False   
-    sim_placa = False 
-
-    self.num_ts = self.num_ts[0]
 
     for i in range(np.sum(self.num_sims)):
       print(f"\nProcessing sim {i}/{np.sum(self.num_sims)}\n", flush=True)
@@ -576,7 +616,7 @@ class Training:
 
     N = int(self.n_samples * (self.num_sims))
 
-    chunk_size = int(N/20)
+    chunk_size = int(N/self.n_chunks)
     print('Applying incremental PCA ' + str(N//chunk_size) + ' times', flush = True)
 
     if (not os.path.isfile(filename_flat)) or (not os.path.isfile('ipca_input.pkl')):
@@ -905,15 +945,16 @@ class Training:
 
       progbar.update(step+1)
 
-      stopEarly = self.Callback_EarlyStopping(epochs_val_losses, min_delta=0.01/100, patience=250)
+      # It was found that if the min_delta is too small, or patience is too high it can cause overfitting
+      stopEarly = self.Callback_EarlyStopping(epochs_val_losses, min_delta=0.1/100, patience=100)
       if stopEarly:
         print("Callback_EarlyStopping signal received at epoch= %d/%d"%(epoch,num_epoch))
         break
 
-      if epoch > 50:
+      if epoch > 20:
         mod = 'model_' + model_name + '.h5'
         if losses_val_mean < min_yet:
-          print('saving model')
+          print(f'saving model: {mod}', flush=True)
           self.model.save(mod)
           min_yet = losses_val_mean
     
@@ -924,17 +965,17 @@ class Training:
     plt.plot(list(range(len(epochs_val_losses))), epochs_val_losses, label ='val')
     plt.yscale('log')
     plt.legend()
-    plt.savefig('loss_vs_epoch.png')
+    plt.savefig(f'loss_vs_epoch_beta{beta_1}lr{lr}reg{regularization}drop{dropout_rate}.png')
 
     ## Save losses data
-    np.savetxt('train_loss' + str(beta_1)+ str(lr)+ '.txt', epochs_train_losses, fmt='%d')
-    np.savetxt('test_loss' + str(beta_1)+ str(lr)+ '.txt', epochs_val_losses, fmt='%d')
+    np.savetxt(f'train_loss_beta{beta_1}lr{lr}reg{regularization}drop{dropout_rate}.txt', epochs_train_losses, fmt='%d')
+    np.savetxt(f'test_loss_beta{beta_1}lr{lr}reg{regularization}drop{dropout_rate}.txt', epochs_val_losses, fmt='%d')
         
     return 0
   
-def main_train(dataset_path, num_sims, num_ts, num_epoch, lr, beta, batch_size, \
+def main_train(dataset_path, num_sims, first_t, last_t, num_epoch, lr, beta, batch_size, \
               standardization_method, n_samples, block_size, delta, max_num_PC, \
-              var_p, var_in, model_architecture, dropout_rate, outarray_fn, outarray_flat_fn, regularization, new_model):
+              var_p, var_in, model_architecture, dropout_rate, outarray_fn, outarray_flat_fn, regularization, new_model, n_chunks):
 
   new_model = new_model.lower() == 'true'
 
@@ -963,12 +1004,11 @@ def main_train(dataset_path, num_sims, num_ts, num_epoch, lr, beta, batch_size, 
     raise ValueError('Invalid NN model type')
 
   paths = [dataset_path]
-  num_ts = [num_ts]
   num_sims = [num_sims]
 
   model_name = f'{model_architecture}-{standardization_method}-{var_p}-drop{dropout_rate}-lr{lr}-reg{regularization}-batch{batch_size}'
 
-  Train = Training(delta, block_size,var_p, var_in, paths, n_samples, num_sims, num_ts, standardization_method)
+  Train = Training(delta, block_size,var_p, var_in, paths, n_samples, num_sims, first_t, last_t, standardization_method, n_chunks)
 
   # If you want to read the crude dataset (hdf5) again, delete the 'outarray.h5' file
   Train.prepare_data (paths, max_num_PC, outarray_fn, outarray_flat_fn) #prepare and save data to tf records

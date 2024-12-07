@@ -12,8 +12,8 @@ def train_entry_point():
                         help='Path to dataset')
     parser.add_argument('--num_sims', type=int, required=True,
                         help='Number of simulations')
-    parser.add_argument('--num_ts', type=int, required=True,
-                        help='Number of temporal frames of each simulation')
+    parser.add_argument('--last_t', type=int, required=True,
+                        help='Last temporal frame to consider')
     parser.add_argument('--num_epoch', type=int, required=True,
                         help='Number of epochs')
     parser.add_argument('--lr', type=float, required=True,
@@ -26,8 +26,12 @@ def train_entry_point():
                         help='Var in value')
     parser.add_argument('--model_architecture', type=str, required=True,
                         help='Model architecture')
+    parser.add_argument('--outarray_flat_fn', type=str, required=True,
+                        help='Path to flat dataset')
 
     # Optional arguments
+    parser.add_argument('--first_t', type=int, default=0,
+                        help='1st temporal frame to consider')
     parser.add_argument('--new_model', type=str, default='true',
                         help='Whether to create a new model')
     parser.add_argument('--dropout_rate', type=float, default=None,
@@ -46,8 +50,8 @@ def train_entry_point():
                         help='Delta value')
     parser.add_argument('--max_num_PC', type=int, default=512,
                         help='Max number of PCs')
-    parser.add_argument('--outarray_flat_fn', type=str, required=True,
-                        help='Path to flat dataset')
+    parser.add_argument('--n_chunks', type=int, default=50,
+                        help='Number of chunks in the incremental PCA. Increase this value if OOM error.')
 
     args = parser.parse_args()
 
@@ -114,4 +118,3 @@ def eval_entry_point():
 
 if __name__ == "__main__":
   train_entry_point()
-
