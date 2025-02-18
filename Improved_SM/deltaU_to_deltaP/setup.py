@@ -9,6 +9,8 @@ setup(
         'console_scripts': [
             'train_script = pressureSM_deltas.entry_point:train_entry_point',
             'evaluation_script = pressureSM_deltas.entry_point:eval_entry_point',
+            'train_Poisson = pressureSM_Poisson.entry_point:train_entry_point',
+            'eval_Poisson = pressureSM_Poisson.entry_point:eval_entry_point'
         ]
     },
     install_requires=[
