@@ -19,6 +19,8 @@ from scipy.spatial import distance
 import scipy.spatial.qhull as qhull
 import scipy.ndimage as ndimage
 
+from . import utils
+
 import dask.array as da
 
 class Evaluation():
@@ -84,109 +86,6 @@ class Evaluation():
 		self.pc_p = np.argmax(self.pcap.explained_variance_ratio_.cumsum() > self.var_p) if np.argmax(self.pcap.explained_variance_ratio_.cumsum() > self.var_p) > 1 and np.argmax(self.pcap.explained_variance_ratio_.cumsum() > self.var_p) <= max_num_PC else max_num_PC
 		self.pc_in = np.argmax(self.pcainput.explained_variance_ratio_.cumsum() > self.var_in) if np.argmax(self.pcainput.explained_variance_ratio_.cumsum() > self.var_in) > 1 and np.argmax(self.pcainput.explained_variance_ratio_.cumsum() > self.var_in) <= max_num_PC else max_num_PC
 
-
-	def interp_weights(self, xyz, uvw, d=2):
-		"""
-		Get interpolation weights and vertices using barycentric interpolation.
-
-		This function calculates the interpolation weights and vertices for interpolating values from the original grid to the target grid.
-		The interpolation is performed using Delaunay triangulation.
-
-		Args:
-			xyz (ndarray): Coordinates of the original grid.
-			uvw (ndarray): Coordinates of the target grid.
-			d (int, optional): Number of dimensions. Default is 2.
-
-		Returns:
-			ndarray: Vertices of the simplices that contain the target grid points.
-			ndarray: Interpolation weights for each target grid point.
-		"""
-		tri = qhull.Delaunay(xyz)
-		simplex = tri.find_simplex(uvw)
-		vertices = np.take(tri.simplices, simplex, axis=0)
-		temp = np.take(tri.transform, simplex, axis=0)
-		delta = uvw - temp[:, d]
-		bary = np.einsum('njk,nk->nj', temp[:, :d, :], delta)
-		wts = np.hstack((bary, 1 - bary.sum(axis=1, keepdims=True)))
-		valid = ~(simplex == -1)
-
-		# Fill out-of-bounds points with Inverse-Distance Weighting
-		if (~valid).any():
-			tree = sklearn.neighbors.KDTree(xyz, leaf_size=40)
-			nndist, nni = tree.query(np.array(uvw)[~valid], k=3)
-			invalid = np.flatnonzero(~valid)
-			vertices[invalid] = list(nni)
-			wts[invalid] = list((1./np.maximum(nndist**2, 1e-6)) / (1./np.maximum(nndist**2, 1e-6)).sum(axis=-1)[:,None])
-			
-		return vertices, wts
-
-	#@njit
-	def interpolate_fill(self, values, vtx, wts, fill_value=np.nan):
-		"""
-		Interpolate based on previously computed vertices (vtx) and weights (wts) and fill.
-
-		Args:
-			values (NDArray): Array of values to interpolate.
-			vtx (NDArray): Array of interpolation vertices.
-			wts (NDArray): Array of interpolation weights.
-			fill_value (float): Value used to fill.
-		
-		Returns:
-			NDArray: Interpolated values with fill_value for invalid weights.
-		"""
-		ret = np.einsum('nj,nj->n', np.take(values, vtx), wts)
-		ret[np.any(wts < 0, axis=1)] = fill_value
-		return ret
-	
-	def create_uniform_grid(self, x_min, x_max, y_min, y_max):
-		"""
-		Creates an uniform 2D grid (should envolve every cell of the mesh).
-
-        Args:
-            x_min (float): The variable name is self-explanatory.
-            x_max (float): The variable name is self-explanatory.
-            y_min (float): The variable name is self-explanatory.
-			y_max (float): The variable name is self-explanatory.
-		"""
-		X0 = np.linspace(x_min + self.delta/2 , x_max - self.delta/2 , num = int(round( (x_max - x_min)/self.delta )) )
-		Y0 = np.linspace(y_min + self.delta/2 , y_max - self.delta/2 , num = int(round( (y_max - y_min)/self.delta )) )
-
-		XX0, YY0 = np.meshgrid(X0,Y0)
-		return XX0.flatten(), YY0.flatten()
-
-	#@njit(nopython = True)  #much faster using numba.njit but is giving an error
-	def index(self, array, item):
-		"""
-		Finds the index of the first element equal to item.
-
-		Args:
-			array (NDArray):
-			item (float):
-		"""
-		for idx, val in np.ndenumerate(array):
-			if val == item:
-				return idx
-			# else:
-			# 	return None
-		# If no item was found return None, other return types might be a problem due to
-		# numbas type inference.
-
-	def read_dataset(self, path, sim, time):
-		"""
-		Reads dataset and splits it into the internal flow data (data) and boundary data.
-
-		Args:
-			path (str): Path to hdf5 dataset
-			sim (int): Simulation number.
-			time (int): Time frame.
-		"""
-		with h5py.File(path, "r") as f:
-			data = f["sim_data"][sim:sim+1, time:time+1, ...]
-			top_boundary = f["top_bound"][sim:sim+1, time:time+1, ...]
-			obst_boundary = f["obst_bound"][sim:sim+1, time:time+1, ...]
-
-		return data, top_boundary, obst_boundary
-
 	def computeOnlyOnce(self, sim):
 		"""
 		Performs interpolation from the OF grid (corresponding to the mesh cell centers),
@@ -196,10 +95,9 @@ class Evaluation():
 			sim (int): Simulation number.
 		"""
 		time = 0
-		data, top_boundary, obst_boundary = self.read_dataset(self.dataset_path, sim , time)
+		data, top_boundary, obst_boundary = utils.read_dataset(self.dataset_path, sim , time)
 
-		self.indice = self.index(data[0,0,:,0] , -100.0 )[0]
-
+		self.indice = utils.index(data[0,0,:,0] , -100.0 )[0]
 
 		x_min = round(np.min(data[0,0,...,:self.indice,3]),3) 
 		x_max = round(np.max(data[0,0,...,:self.indice,3]),3) 
@@ -209,22 +107,22 @@ class Evaluation():
 
 		######### -------------------- Assuming constant mesh, the following can be done out of the for cycle ------------------------------- ##########
 
-		X0, Y0 = self.create_uniform_grid(x_min, x_max, y_min, y_max)
+		X0, Y0 = utils.create_uniform_grid(x_min, x_max, y_min, y_max, self.delta)
 		self.X0 = X0
 		self.Y0 = Y0
 		xy0 = np.concatenate((np.expand_dims(X0, axis=1),np.expand_dims(Y0, axis=1)), axis=-1)
 		points = data[0,0,:self.indice,3:5] #coordinates
-		self.vert, self.weights = self.interp_weights(points, xy0) #takes ~100% of the interpolation cost and it's only done once for each different mesh/simulation case
+		self.vert, self.weights = utils.interp_weights(points, xy0) #takes ~100% of the interpolation cost and it's only done once for each different mesh/simulation case
 
 		# boundaries indice
-		indice_top = self.index(top_boundary[0,0,:,0] , -100.0 )[0]
+		indice_top = utils.index(top_boundary[0,0,:,0] , -100.0 )[0]
 		top = top_boundary[0,0,:indice_top,:]
 		self.max_x, self.max_y = np.max([(top[:,0]).max(), x_max]), np.min([(top[:,1]).max(), y_max])
 		self.min_x, self.min_y = np.max([(top[:,0]).min(), x_min]), np.min([(top[:,1]).min(), y_min])
 
 		is_inside_domain = ( xy0[:,0] <= self.max_x)  * ( xy0[:,0] >= self.min_x ) * ( xy0[:,1] <= self.max_y ) * ( xy0[:,1] >= self.min_y ) #rhis is just for simplification
 
-		indice_obst = self.index(obst_boundary[0,0,:,0] , -100.0 )[0]
+		indice_obst = utils.index(obst_boundary[0,0,:,0] , -100.0 )[0]
 		obst = obst_boundary[0,0,:indice_obst,:]
 
 		obst_points = MultiPoint(obst)
@@ -265,7 +163,7 @@ class Evaluation():
 		self.sdfunct = np.zeros((self.grid_shape_y,self.grid_shape_x,1))
 
 		p = data[i,j,:self.indice,2:3] #values
-		p_interp = self.interpolate_fill(p, self.vert, self.weights) 
+		p_interp = utils.interpolate_fill(p, self.vert, self.weights) 
 
 		for (step, x_y) in enumerate(xy0):  
 			if domain_bool[step] * (~np.isnan(p_interp[step])) :
@@ -481,7 +379,7 @@ class Evaluation():
 		Returns:
 			None
 		"""
-		data, top_boundary, obst_boundary = self.read_dataset(self.dataset_path, sim , time)
+		data, top_boundary, obst_boundary = utils.read_dataset(self.dataset_path, sim , time)
 
 		i = 0
 		j = 0
@@ -516,22 +414,18 @@ class Evaluation():
 			print(f"\n\n Irrelevant time step, U_norm changed {(deltaU_max_norm/U_max_norm)*100:.2f} [%] (criteria: < {threshold*100:.2f} [%]).\n Skipping Time step.")
 			return 0
 
-		# The irrelevant_ts check avoids division by 0 here
-		#delta_p_adim = delta_p/pow(deltaU_max_norm,2.0) 
-		#delta_Ux_adim = delta_Ux/deltaU_max_norm 
-		#delta_Uy_adim = delta_Uy/deltaU_max_norm 
-
 		delta_p_adim = delta_p / pow(U_max_norm,2.0) 
 		delta_Ux_adim = delta_Ux/U_max_norm
 		delta_Uy_adim = delta_Uy/U_max_norm
 
-		delta_p_interp = self.interpolate_fill(delta_p_adim, self.vert, self.weights)
-		delta_Ux_interp = self.interpolate_fill(delta_Ux_adim, self.vert, self.weights)
-		delta_Uy_interp = self.interpolate_fill(delta_Uy_adim, self.vert, self.weights)
-		p_interp = self.interpolate_fill(p, self.vert, self.weights)
+		delta_p_interp = utils.interpolate_fill(delta_p_adim, self.vert, self.weights)
+		delta_Ux_interp = utils.interpolate_fill(delta_Ux_adim, self.vert, self.weights)
+		delta_Uy_interp = utils.interpolate_fill(delta_Uy_adim, self.vert, self.weights)
+		p_interp = utils.interpolate_fill(p, self.vert, self.weights)
+
 		# weighting 
-		deltaU_changed_interp = self.interpolate_fill(deltaU_changed, self.vert, self.weights)
-		delta_p_prev_interp = self.interpolate_fill(delta_p_prev, self.vert, self.weights)
+		deltaU_changed_interp = utils.interpolate_fill(deltaU_changed, self.vert, self.weights)
+		delta_p_prev_interp = utils.interpolate_fill(delta_p_prev, self.vert, self.weights)
 
 		grid = np.zeros(shape=(1, self.grid_shape_y, self.grid_shape_x, 5))
 
@@ -656,6 +550,14 @@ class Evaluation():
 		## This only needs to be done when calling the SM in the CFD solver
 		res_concat = res_concat  * self.max_abs_p * pow(U_max_norm,2.0)
 
+		## Here compute the error only based on the blocks pressure fields - before the assembly
+		flow_bool = self.x_array[...,2:3] != 0
+		pred_minus_true_block, pred_minus_true_squared_block = utils.compute_in_block_error(res_concat, y_array * self.max_abs_p * pow(U_max_norm,2.0), flow_bool)
+		self.pred_minus_true_block.append(pred_minus_true_block)
+		self.pred_minus_true_squared_block.append(pred_minus_true_squared_block)
+		
+		utils.plot_random_blocks(res_concat, y_array, self.x_array, sim, time, save_plots)
+
 		#### This gives worse results... #####
 		# Ignore blocks with near zero delta_U
 		# Assign deltap = 0
@@ -668,15 +570,13 @@ class Evaluation():
 		self.Ref_BC = 0 
 
 		# performing the assembly process
-		apply_deltaU_change_wgt = True
+		apply_deltaU_change_wgt = False
 		deltap_res, change_in_deltap = self.assemble_prediction(res_concat[...,0], indices_list, n_x, n_y, apply_filter,
 									grid.shape[2], grid.shape[1], deltaU_change_grid, deltaP_prev_grid, apply_deltaU_change_wgt)
 		
 		# The next line can be used to evaluate the assembly algorithm
 		#deltap_test_res = self.assemble_prediction(y_array[...,0], indices_list, n_x, n_y, apply_filter, grid.shape[2], grid.shape[1])
 		
-		################## ----------------//---------------####################################
-
 		## use field_deltap = deltap_test_res to test the assembly algorith -> it should be almost perfect in that case
 		if not apply_deltaU_change_wgt:
 			# option 1: use pure deltap
@@ -698,43 +598,42 @@ class Evaluation():
 
 			masked_arr = np.ma.array(field_deltap, mask=no_flow_bool)
 			axs[0,0].set_title('delta_p predicted', fontsize = 15)
-			cf = axs[0,0].imshow(masked_arr, interpolation='nearest', cmap='jet')#, vmax = vmax, vmin = vmin )
+			cf = axs[0,0].imshow(masked_arr, interpolation='nearest', cmap='viridis')#, vmax = vmax, vmin = vmin )
 			plt.colorbar(cf, ax=axs[0,0])
 
 			masked_arr = np.ma.array(cfd_results, mask=no_flow_bool)
 			axs[1,0].set_title('CFD results', fontsize = 15)
-			cf = axs[1,0].imshow(masked_arr, interpolation='nearest', cmap='jet')#, vmax = vmax, vmin = vmin)
+			cf = axs[1,0].imshow(masked_arr, interpolation='nearest', cmap='viridis')#, vmax = vmax, vmin = vmin)
 			plt.colorbar(cf, ax=axs[1,0])
 
 			masked_arr = np.ma.array( np.abs(( cfd_results - field_deltap )/(np.max(cfd_results) -np.min(cfd_results))*100) , mask=no_flow_bool)
 			axs[2,0].set_title('error in %', fontsize = 15)
-			cf = axs[2,0].imshow(masked_arr, interpolation='nearest', cmap='jet', vmax = 10, vmin=0 )
+			cf = axs[2,0].imshow(masked_arr, interpolation='nearest', cmap='viridis', vmax = 10, vmin=0 )
 			plt.colorbar(cf, ax=axs[2,0])
 
 			# deltaP values without weighting
 			masked_arr = np.ma.array(deltap_res, mask=no_flow_bool)
 			axs[0,1].set_title('delta_p predicted - no weighting', fontsize = 15)
-			cf = axs[0,1].imshow(masked_arr, interpolation='nearest', cmap='jet')#, vmax = vmax, vmin = vmin )
+			cf = axs[0,1].imshow(masked_arr, interpolation='nearest', cmap='viridis')#, vmax = vmax, vmin = vmin )
 			plt.colorbar(cf, ax=axs[0,1])
 
 			masked_arr = np.ma.array(cfd_results, mask=no_flow_bool)
 			axs[1,1].set_title('CFD results', fontsize = 15)
-			cf = axs[1,1].imshow(masked_arr, interpolation='nearest', cmap='jet')#, vmax = vmax, vmin = vmin)
+			cf = axs[1,1].imshow(masked_arr, interpolation='nearest', cmap='viridis')#, vmax = vmax, vmin = vmin)
 			plt.colorbar(cf, ax=axs[1,1])
 
 			masked_arr = np.ma.array( np.abs(( cfd_results - deltap_res )/(np.max(cfd_results) -np.min(cfd_results))*100) , mask=no_flow_bool)
 			axs[2,1].set_title('error in %', fontsize = 15)
-			cf = axs[2,1].imshow(masked_arr, interpolation='nearest', cmap='jet', vmax = 10, vmin=0 )
+			cf = axs[2,1].imshow(masked_arr, interpolation='nearest', cmap='viridis', vmax = 10, vmin=0 )
 			plt.colorbar(cf, ax=axs[2,1])
 
 		if show_plots:
 		        plt.show()
 
 		if save_plots:
-		        fig.savefig(f'plots/deltap_pred_sim{sim}t{time}.png')
+			plt.savefig(f'plots/sim{sim}/deltap_pred_t{time}.png')
 
 		plt.close()
-
 
 		# actual pressure fields
 
@@ -751,26 +650,25 @@ class Evaluation():
 
 			masked_arr = np.ma.array(p_pred, mask=no_flow_bool)
 			axs[0].set_title(r'Predicted pressure $p_{t-1} + delta_p$', fontsize = 15)
-			cf = axs[0].imshow(masked_arr, interpolation='nearest', cmap='jet')#, vmax = vmax, vmin = vmin )
+			cf = axs[0].imshow(masked_arr, interpolation='nearest', cmap='viridis')#, vmax = vmax, vmin = vmin )
 			plt.colorbar(cf, ax=axs[0])
 
 			masked_arr = np.ma.array(grid[0,:,:,4], mask=no_flow_bool)
 			axs[1].set_title('Pressure (CFD)', fontsize = 15)
-			cf = axs[1].imshow(masked_arr, interpolation='nearest', cmap='jet')#, vmax = vmax, vmin = vmin)
+			cf = axs[1].imshow(masked_arr, interpolation='nearest', cmap='viridis')#, vmax = vmax, vmin = vmin)
 			plt.colorbar(cf, ax=axs[1])
 
 			masked_arr = np.ma.array( np.abs(( grid[0,:,:,4] - p_pred )/(np.max(grid[0,:,:,4]) -np.min(grid[0,:,:,4]))*100) , mask=no_flow_bool)
 
 			axs[2].set_title('error in %', fontsize = 15)
-			cf = axs[2].imshow(masked_arr, interpolation='nearest', cmap='jet', vmax = 2, vmin=0 )
+			cf = axs[2].imshow(masked_arr, interpolation='nearest', cmap='viridis')#, vmax = 2, vmin=0 )
 			plt.colorbar(cf, ax=axs[2])
-
 
 		if show_plots:
 			plt.show()
 
 		if save_plots:
-			fig.savefig(f'plots/p_pred_sim{sim}t{time}.png')
+			plt.savefig(f'plots/sim{sim}/p_pred_t{time}.png')
 
 		plt.close()
 
@@ -779,19 +677,19 @@ class Evaluation():
 			fig, axs = plt.subplots(3,1, figsize=(65, 15))
 
 			masked_arr = np.ma.array(grid[0,:,:,0], mask=no_flow_bool)
-			cf = axs[0].imshow(masked_arr, interpolation='nearest', cmap='jet')#, vmax = vmax, vmin = vmin )
+			cf = axs[0].imshow(masked_arr, interpolation='nearest', cmap='viridis')#, vmax = vmax, vmin = vmin )
 			plt.colorbar(cf, ax=axs[0])
 
 			masked_arr = np.ma.array(grid[0,:,:,1], mask=no_flow_bool)
-			cf = axs[1].imshow(masked_arr, interpolation='nearest', cmap='jet')#, vmax = vmax, vmin = vmin)
+			cf = axs[1].imshow(masked_arr, interpolation='nearest', cmap='viridis')#, vmax = vmax, vmin = vmin)
 			plt.colorbar(cf, ax=axs[1])
 
 			masked_arr = np.ma.array( grid[0,:,:,2] , mask=no_flow_bool)
-			cf = axs[2].imshow(masked_arr, interpolation='nearest', cmap='jet', vmax = 10, vmin=0 )
+			cf = axs[2].imshow(masked_arr, interpolation='nearest', cmap='viridis', vmax = 10, vmin=0 )
 			plt.colorbar(cf, ax=axs[2])
 
 		if save_plots:
-			plt.savefig(f'plots/inputs{sim}t{time}.png')
+			plt.savefig(f'plots/sim{sim}/inputs-t{time}.png')
 		
 		############## ------------------//------------------##############################
 		
@@ -802,14 +700,7 @@ class Evaluation():
 		norm_true = np.max(true_masked) - np.min(true_masked)
 		norm_pred = np.max(pred_masked) - np.min(pred_masked)
 
-		# Using the largest norm value to avoid problems with near-zero norms leading to relative errors tending to infinity
-		# This bounds the relative errors to [-100%, 100%]
-		norm = norm_true #max(norm_true, norm_pred)
-
-		print(f"""
-		norm_true = {norm_true};
-		norm_pred = {norm_pred};
-		""")
+		norm = norm_true
 
 		mask_nan = ~np.isnan( pred_masked  - true_masked )
 
@@ -817,18 +708,16 @@ class Evaluation():
 		RMSE_norm = np.sqrt(np.mean( ( pred_masked  - true_masked )[mask_nan]**2 ))/norm * 100
 		STDE_norm = np.sqrt( (RMSE_norm**2 - BIAS_norm**2) )
 		
-		# If norm_true is very different from norm_pred, it is likely that there is some problem with the input data
-		# there are cases were the norm_pred is around 0.6 (typical value for all the sims) and norm_true is 20 (which makes no sense) 
-		# Ignoring those...
-		
-		#if norm_true < (2 * norm_pred):
 		print(f"""
+		norm_true = {norm_true};
+		norm_pred = {norm_pred};
+
 		** Error in delta_p **
 
-		normVal  = {norm} Pa
-		biasNorm = {BIAS_norm:.3f}%
-		stdeNorm = {STDE_norm:.3f}%
-		rmseNorm = {RMSE_norm:.3f}%
+			normVal  = {norm} Pa
+			biasNorm = {BIAS_norm:.3f}%
+			stdeNorm = {STDE_norm:.3f}%
+			rmseNorm = {RMSE_norm:.3f}%
 		""", flush = True)
 
 		self.pred_minus_true.append( np.mean( (pred_masked  - true_masked )[mask_nan] )/norm )
@@ -844,14 +733,13 @@ class Evaluation():
 		RMSE_norm = np.sqrt(np.mean( ( pred_masked  - true_masked )[mask_nan]**2 ))/norm * 100
 		STDE_norm = np.sqrt( (RMSE_norm**2 - BIAS_norm**2) )
 
-		#if norm_true < (2 * norm_pred):
 		print(f"""
 		** Error in delta_p - no weighting **
 
-		normVal  = {norm} Pa
-		biasNorm = {BIAS_norm:.3f}%
-		stdeNorm = {STDE_norm:.3f}%
-		rmseNorm = {RMSE_norm:.3f}%
+			normVal  = {norm} Pa
+			biasNorm = {BIAS_norm:.3f}%
+			stdeNorm = {STDE_norm:.3f}%
+			rmseNorm = {RMSE_norm:.3f}%
 		""", flush = True)
 
 		self.pred_minus_true_deltap_crude.append( np.mean( (pred_masked  - true_masked )[mask_nan] )/norm )
@@ -872,14 +760,13 @@ class Evaluation():
 		RMSE_norm = np.sqrt(np.mean( ( pred_masked  - true_masked )[mask_nan]**2 ))/norm * 100
 		STDE_norm = np.sqrt( (RMSE_norm**2 - BIAS_norm**2) )
 
-		#if norm_true < (2 * norm_pred):
 		print(f"""
 		** Error in p **
 
-		normVal  = {norm} Pa
-		biasNorm = {BIAS_norm:.5f}%
-		stdeNorm = {STDE_norm:.5f}%
-		rmseNorm = {RMSE_norm:.5f}%
+			normVal  = {norm} Pa
+			biasNorm = {BIAS_norm:.5f}%
+			stdeNorm = {STDE_norm:.5f}%
+			rmseNorm = {RMSE_norm:.5f}%
 		""", flush = True)
 
 		self.pred_minus_true_p.append( np.mean( (pred_masked  - true_masked )[mask_nan] )/norm )
@@ -887,43 +774,23 @@ class Evaluation():
 
 		return 0
 
-	def createGIF(self, n_sims, n_ts):
-		
-		####################### TO CREATE A GIF WITH ALL THE FRAMES ###############################
-		filenamesp = []
-
-		for sim in range(5):
-			for time in range(5):
-				filenamesp.append(f'plots/p_pred_sim{sim}t{time}.png') #hardcoded to get the frames in order
-
-		import imageio
-
-		with imageio.get_writer('plots/p_movie.gif', mode='I', duration =0.5) as writer:
-			for filename in filenamesp:
-				image = imageio.imread(filename)
-				writer.append_data(image)
-		######################## ---------------- //----------------- ###################
-
-
 
 def call_SM_main(delta, model_name, shape, overlap_ratio, var_p, var_in, max_num_PC, dataset_path, \
 					plot_intermediate_fields, standardization_method, save_plots, show_plots, apply_filter, create_GIF, \
 					n_sims, n_ts):
 
 	if save_plots:
-		### This creates a directory to save the plots
-		path='plots/'
-
-		try:
+		path = 'plots/'
+		if os.path.exists(path):
 			shutil.rmtree(path)
-		except OSError as e:
-			print ("")
-
 		os.makedirs(path)
 
 	overlap = int(overlap_ratio*shape)
 	
 	Eval = Evaluation(delta, shape, overlap, var_p, var_in, dataset_path, model_name, max_num_PC, standardization_method)
+
+	Eval.pred_minus_true_block = []
+	Eval.pred_minus_true_squared_block = []
 
 	Eval.pred_minus_true = []
 	Eval.pred_minus_true_squared = []
@@ -939,46 +806,82 @@ def call_SM_main(delta, model_name, shape, overlap_ratio, var_p, var_in, max_num
 	sims = list(range(n_sims))
 
 	for sim in sims:
+		path = f'plots/sim{sim}'
+		if os.path.exists(path):
+			shutil.rmtree(path)
+		os.makedirs(path)
+
 		Eval.computeOnlyOnce(sim)
 		# Timesteps used for evaluation
 		for time in range(n_ts):
 			Eval.timeStep(sim, time, plot_intermediate_fields, save_plots, show_plots, apply_filter)
 
+		# Errors for each simulation
+		BIAS_value = np.mean(Eval.pred_minus_true[-n_ts:]) * 100
+		RMSE_value = np.sqrt(np.mean(Eval.pred_minus_true_squared[-n_ts:])) * 100
+		STDE_value = np.sqrt( RMSE_value**2 - BIAS_value**2 )
+
+		BIAS_block = np.mean(Eval.pred_minus_true_block[-n_ts:]) * 100
+		RSME_block = np.sqrt(np.mean(Eval.pred_minus_true_squared_block[-n_ts:])) * 100
+		STDE_block = np.sqrt( RSME_block**2 - BIAS_block**2 )
+
 		BIAS_value_deltap_crude = np.mean(Eval.pred_minus_true_deltap_crude[-n_ts:]) * 100
 		RMSE_value_deltap_crude = np.sqrt(np.mean(Eval.pred_minus_true_squared_deltap_crude[-n_ts:])) * 100
 		STDE_value_deltap_crude = np.sqrt( RMSE_value_deltap_crude**2 - BIAS_value_deltap_crude**2 )
 
-		BIAS_value = np.mean(Eval.pred_minus_true[-n_ts:]) * 100
-		RMSE_value = np.sqrt(np.mean(Eval.pred_minus_true_squared[-n_ts:])) * 100
-		STDE_value = np.sqrt( RMSE_value**2 - BIAS_value**2 )
+		BIAS_value_p = np.mean(Eval.pred_minus_true_p) * 100
+		RMSE_value_p = np.sqrt(np.mean(Eval.pred_minus_true_squared_p)) * 100
+		STDE_value_p = np.sqrt( RMSE_value_p**2 - BIAS_value_p**2 )
+
+		print(f"Eval.pred_minus_true_block len: {len(Eval.pred_minus_true_block)}")
+		print(f"Eval.pred_minus_true_block len: {len(Eval.pred_minus_true_squared_block)}")
 		print(f'''
-		        Average in SIM {sim}:
+			Average error in SIM {sim}:
 
-		        ** Error in delta_p **
+			** Error in delta_p **
 
-		        BIAS: {BIAS_value:.3f}%
-		        STDE: {STDE_value:.3f}%
-		        RMSE: {RMSE_value:.3f}%
+			BIAS: {BIAS_value:.3f}%
+			STDE: {STDE_value:.3f}%
+			RMSE: {RMSE_value:.3f}%
 
-			** Error in delta_p - no weighting **
+			** Error in p **
 
-		        BIAS: {BIAS_value_deltap_crude:.3f}%
-		        STDE: {STDE_value_deltap_crude:.3f}%
-		        RMSE: {RMSE_value_deltap_crude:.3f}%
+			BIAS: {BIAS_value_p:.5f}%
+			STDE: {STDE_value_p:.5f}%
+			RMSE: {RMSE_value_p:.5f}%
+
+			Before Weighting:
+
+				** Error in delta_p (blocks) **
+
+				BIAS: {BIAS_block:.3f}%
+				STDE: {STDE_block:.3f}%
+				RMSE: {RSME_block:.3f}%
+
+				** Error in delta_p **
+
+				BIAS: {BIAS_value_deltap_crude:.3f}%
+				STDE: {STDE_value_deltap_crude:.3f}%
+				RMSE: {RMSE_value_deltap_crude:.3f}%
 			''')
 
 
+	# Errors for the whole set of simulations
 	BIAS_value = np.mean(Eval.pred_minus_true) * 100
 	RMSE_value = np.sqrt(np.mean(Eval.pred_minus_true_squared)) * 100
 	STDE_value = np.sqrt( RMSE_value**2 - BIAS_value**2 )
 
-	BIAS_value_deltap_crude = np.mean(Eval.pred_minus_true_deltap_crude) * 100
-	RMSE_value_deltap_crude = np.sqrt(np.mean(Eval.pred_minus_true_squared_deltap_crude)) * 100
-	STDE_value_deltap_crude = np.sqrt( RMSE_value**2 - BIAS_value**2 )
-
 	BIAS_value_p = np.mean(Eval.pred_minus_true_p) * 100
 	RMSE_value_p = np.sqrt(np.mean(Eval.pred_minus_true_squared_p)) * 100
 	STDE_value_p = np.sqrt( RMSE_value_p**2 - BIAS_value_p**2 )
+
+	BIAS_block = np.mean(Eval.pred_minus_true_block) * 100
+	RSME_block = np.sqrt(np.mean(Eval.pred_minus_true_squared_block)) * 100
+	STDE_block = np.sqrt( RSME_block**2 - BIAS_block**2 )
+
+	BIAS_value_deltap_crude = np.mean(Eval.pred_minus_true_deltap_crude) * 100
+	RMSE_value_deltap_crude = np.sqrt(np.mean(Eval.pred_minus_true_squared_deltap_crude)) * 100
+	STDE_value_deltap_crude = np.sqrt( RMSE_value**2 - BIAS_value**2 )
 
 	print(f'''
 	Average across the WHOLE set of simulations:
@@ -989,20 +892,30 @@ def call_SM_main(delta, model_name, shape, overlap_ratio, var_p, var_in, max_num
 	STDE: {STDE_value:.3f}%
 	RMSE: {RMSE_value:.3f}%
 
-	** Error in delta_p - w/ weighting**
-
-	BIAS: {BIAS_value_deltap_crude:.3f}%
-	STDE: {STDE_value_deltap_crude:.3f}%
-	RMSE: {RMSE_value_deltap_crude:.3f}%
-
 	** Error in p **
+
 	BIAS: {BIAS_value_p:.5f}%
 	STDE: {STDE_value_p:.5f}%
 	RMSE: {RMSE_value_p:.5f}%
+	
+	Before Weighting:
+
+		** Error in delta_p (blocks) **
+
+		BIAS: {BIAS_block:.3f}%
+		STDE: {STDE_block:.3f}%
+		RMSE: {RSME_block:.3f}%
+
+		** Error in delta_p **
+
+		BIAS: {BIAS_value_deltap_crude:.3f}%
+		STDE: {STDE_value_deltap_crude:.3f}%
+		RMSE: {RMSE_value_deltap_crude:.3f}%
+
 	''', flush = True)
 
 	if create_GIF:
-		self.createGIF(n_sims, n_ts)
+		utils.createGIF(n_sims, n_ts)
 
 
 if __name__ == '__main__':
