@@ -1,0 +1,31 @@
+This uses:
+
+# tentando ter o máximo de informação possível
+inputs:
+deltaUx /deltaUmax
+deltaUy /deltaUmax
+Ux /umax
+Uy /umax
+p_prev /umax²
+dist
+
+outputs:
+deltap /umax²
+
+
+
+
+alternativa seria:
+
+# tentando ter o máximo de informação possível
+inputs:
+deltaUx * phi/nu
+deltaUy * phi/nu
+Ux * phi/nu
+Uy * phi/nu
+p_prev /umax²
+dist
+
+outputs:
+deltap /umax²
+
