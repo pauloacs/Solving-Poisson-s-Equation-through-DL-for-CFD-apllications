@@ -58,6 +58,12 @@ def train_entry_point():
     # Convert args to dictionary
     args_dict = vars(args)
 
+    # Print all the arguments
+    print("******** Arguments: **********")
+    for key, value in args_dict.items():
+        print(f"{key}: {value}")
+    print("******************************* \n")
+
     # Pass arguments to main_train function
     main_train(**args_dict)
 
@@ -118,3 +124,4 @@ def eval_entry_point():
 
 if __name__ == "__main__":
   train_entry_point()
+  eval_entry_point()

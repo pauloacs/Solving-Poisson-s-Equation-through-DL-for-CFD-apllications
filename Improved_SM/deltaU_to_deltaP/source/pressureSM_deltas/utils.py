@@ -8,7 +8,16 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 import scipy.spatial.qhull as qhull
-
+import matplotlib.path as mpltPath
+import tensorflow as tf
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+from sklearn.pipeline import Pipeline
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error
+from sklearn.neighbors import KDTree
+from shapely.geometry import MultiPoint
+from scipy.spatial import distance
 
 def interp_weights(xyz, uvw, d=2):
     """
@@ -230,3 +239,223 @@ def compute_in_block_error(pred, true, flow_bool):
     pred_minus_true_block = np.mean( (pred_masked  - true_masked )[mask_nan] )/norm
     pred_minus_true_squared_block = np.mean( (pred_masked  - true_masked )[mask_nan]**2 )/norm**2
     return pred_minus_true_block, pred_minus_true_squared_block
+
+
+def domain_dist(i, top_boundary, obst_boundary, xy0):
+    # boundaries indice
+    indice_top = index(top_boundary[i,0,:,0] , -100.0 )[0]
+    top = top_boundary[i,0,:indice_top,:]
+    max_x, max_y, min_x, min_y = np.max(top[:,0]), np.max(top[:,1]) , np.min(top[:,0]) , np.min(top[:,1])
+
+    is_inside_domain = ( xy0[:,0] <= max_x)  * ( xy0[:,0] >= min_x ) * ( xy0[:,1] <= max_y ) * ( xy0[:,1] >= min_y )
+
+    # regular polygon for testing
+
+    # # Matplotlib mplPath
+    # path = mpltPath.Path(top_inlet_outlet)
+    # is_inside_domain = path.contains_points(xy0)
+    # print(is_inside_domain.shape)
+
+    indice_obst = index(obst_boundary[i,0,:,0] , -100.0 )[0]
+    obst = obst_boundary[i,0,:indice_obst,:]
+
+    obst_points =  MultiPoint(obst)
+
+    hull = obst_points.convex_hull       #only works for convex geometries
+    hull_pts = hull.exterior.coords.xy    #have a code for any geometry . enven concave https://stackoverflow.com/questions/14263284/create-non-intersecting-polygon-passing-through-all-given-points/47410079
+    hull_pts = np.c_[hull_pts[0], hull_pts[1]]
+
+    path = mpltPath.Path(hull_pts)
+    is_inside_obst = path.contains_points(xy0)
+
+    domain_bool = is_inside_domain * ~is_inside_obst
+
+    top = top[0:top.shape[0]:2,:]   #if this has too many values, using cdist can crash the memory since it needs to evaluate the distance between ~1M points with thousands of points of top
+    obst = obst[0:obst.shape[0]:2,:]
+
+    #print(top.shape)
+
+    sdf = np.minimum( distance.cdist(xy0,obst).min(axis=1) , distance.cdist(xy0,top).min(axis=1) ) * domain_bool
+    #print(np.max(distance.cdist(xy0,top).min(axis=1)))
+    #print(np.max(sdf))
+
+    return domain_bool, sdf
+
+
+def unison_shuffled_copies(a, b):
+    assert len(a) == len(b)
+    p = np.random.permutation(len(a))
+    return a[p], b[p]
+    
+def normalize_PCA_data(input, output, standardization_method: str = "std"):
+    if standardization_method == 'min_max':
+        ## Option 2: Min-max scaling
+        min_in = np.min(input, axis=0)
+        max_in = np.max(input, axis=0)
+
+        min_out = np.min(output, axis=0)
+        max_out = np.max(output, axis=0)
+
+        np.savez('min_max_values.npz', min_in=min_in, max_in=max_in, min_out=min_out, max_out=max_out)
+
+        # Perform min-max scaling
+        x = (input - min_in) / (max_in - min_in)
+        y = (output - min_out) / (max_out - min_out)
+        
+    elif standardization_method == 'std':
+        ## Option 1: Standardization
+        mean_in = np.mean(input, axis=0)
+        std_in = np.std(input, axis=0)
+
+        mean_out = np.mean(output, axis=0)
+        std_out = np.std(output, axis=0)
+
+        np.savez('mean_std.npz', mean_in=mean_in, std_in=std_in, mean_out=mean_out, std_out=std_out)
+
+        x = (input - mean_in) /std_in
+        y = (output - mean_out) /std_out
+
+    elif standardization_method == 'max_abs':
+        # Option 3 - Old method
+        max_abs_input_PCA = np.max(np.abs(input))
+        max_abs_p_PCA = np.max(np.abs(output))
+        print( max_abs_input_PCA, max_abs_p_PCA)
+
+        np.savetxt('maxs_PCA', [max_abs_input_PCA, max_abs_p_PCA] )
+
+        x = input/max_abs_input_PCA
+        y = output/max_abs_p_PCA
+
+    return x, y
+        
+
+## TF handling of training data
+
+def bytes_feature(value):
+    """Returns a bytes_list from a string / byte."""
+    if isinstance(value, type(tf.constant(0))):
+        value = value.numpy()  # BytesList won't unpack a string from an EagerTensor.
+    return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
+def float_feature(value):
+    """Returns a float_list from a float / double."""
+    return tf.train.Feature(float_list=tf.train.FloatList(value=[value]))
+def int64_feature(value):
+    """Returns an int64_list from a bool / enum / int / uint."""
+    return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
+
+def parse_single_image(input_parse, output_parse):
+    #define the dictionary -- the structure -- of our single example
+    data = {
+    'height' : int64_feature(input_parse.shape[0]),
+            'depth_x' : int64_feature(input_parse.shape[1]),
+            'depth_y' : int64_feature(output_parse.shape[1]),
+            'raw_input' : bytes_feature(tf.io.serialize_tensor(input_parse)),
+            'output' : bytes_feature(tf.io.serialize_tensor(output_parse)),
+        }
+
+    #create an Example, wrapping the single features
+    out = tf.train.Example(features=tf.train.Features(feature=data))
+
+    return out
+
+def write_images_to_tfr_short(input, output, filename:str="images"):
+    filename= filename+".tfrecords"
+    # Create a writer that'll store our data to disk
+    writer = tf.io.TFRecordWriter(filename)
+    count = 0
+
+    for index in range(len(input)):
+        #get the data we want to write
+        current_input = input[index].astype('float32')
+        current_output = output[index].astype('float32')
+
+        out = parse_single_image(input_parse=current_input, output_parse=current_output)
+        writer.write(out.SerializeToString())
+        count += 1
+
+    writer.close()
+    print(f"Wrote {count} elements to TFRecord")
+    return count
+
+def parse_tfr_element(element):
+    #use the same structure as above; it's kinda an outline of the structure we now want to create
+    data = {
+        'height': tf.io.FixedLenFeature([], tf.int64),
+        'output' : tf.io.FixedLenFeature([], tf.string),
+        'raw_input' : tf.io.FixedLenFeature([], tf.string),
+        'depth_x':tf.io.FixedLenFeature([], tf.int64),
+        'depth_y':tf.io.FixedLenFeature([], tf.int64)
+        }
+
+    content = tf.io.parse_single_example(element, data)
+
+    height = content['height']
+    depth_x = content['depth_x']
+    depth_y = content['depth_y']
+    output = content['output']
+    raw_input = content['raw_input']
+        
+    #get our 'feature'-- our image -- and reshape it appropriately
+
+    input_out= tf.io.parse_tensor(raw_input, out_type=tf.float32)
+    output_out = tf.io.parse_tensor(output, out_type=tf.float32)
+
+    return ( input_out , output_out)
+
+def Callback_EarlyStopping(LossList, min_delta=0.1, patience=20):
+    #No early stopping for 2*patience epochs
+    if len(LossList)//patience < 2 :
+        return False
+    #Mean loss for last patience epochs and second-last patience epochs
+    mean_previous = np.mean(LossList[::-1][patience:2*patience]) #second-last
+    mean_recent = np.mean(LossList[::-1][:patience]) #last
+    #you can use relative or absolute change
+    delta_abs = np.abs(mean_recent - mean_previous) #abs change
+    delta_abs = np.abs(delta_abs / mean_previous)  # relative change
+    if delta_abs < min_delta :
+        print("*CB_ES* Loss didn't change much from last %d epochs"%(patience))
+        print("*CB_ES* Percent change in loss value:", delta_abs*1e2)
+        return True
+    else:
+        return False
+
+def load_dataset_tf(filename, batch_size, buffer_size):
+    #create the dataset
+    dataset = tf.data.TFRecordDataset(filename)
+
+    #pass every single feature through our mapping function
+    dataset = dataset.map(parse_tfr_element)
+
+    dataset = dataset.shuffle(buffer_size=buffer_size )
+    #epoch = tf.data.Dataset.range(epoch_num)
+    dataset = dataset.batch(batch_size)
+
+    return dataset
+
+def define_model_arch(model_architecture: str) -> tuple[int, list]:
+
+  if model_architecture == 'MLP_small':
+    n_layers = 3
+    width = [512]*3
+  elif model_architecture == 'MLP_big':
+    n_layers = 7
+    width = [256] + [512]*5 + [256]
+  elif model_architecture == 'MLP_huge':
+    n_layers = 12
+    width = [256] + [512]*10 + [256]
+  elif model_architecture == 'MLP_huger':
+    n_layers = 20
+    width = [256] + [512]*18 + [256]
+  elif model_architecture == 'MLP_small_unet':
+    n_layers = 9
+    width = [512, 256, 128, 64, 32, 64, 128, 256, 512]
+  elif model_architecture == 'conv1D':
+    n_layers = 7
+    width = [128, 64, 32, 16, 32, 64, 128]
+  elif model_architecture == 'MLP_attention':
+    n_layers = 3
+    width = [512]*3
+  else:
+    raise ValueError('Invalid NN model type')
+
+  return n_layers, width
