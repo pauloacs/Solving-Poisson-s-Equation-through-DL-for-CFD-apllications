@@ -1,5 +1,9 @@
 # Solving Poisson's Equation through DL for CFD Applications
 
+For the most modern version of these Deep Learning surrogate models, please refer to [DLpisoFoam](https://github.com/pauloacs/DLpisoFoam) repository.
+
+
+
 This repository contains the code and resources related to solving Poisson's equation through deep learning for computational fluid dynamics (CFD) applications. It is organized into two main folders:
 ## 1. Master Thesis
 
